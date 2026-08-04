@@ -81,21 +81,33 @@ test("the locked dependency graph excludes use-restricted source-available licen
 });
 
 test("the checked-in SBOM identifies this repository with a valid CycloneDX serial", async () => {
-  const sbom = JSON.parse(await readFile(path.join(root, "sbom.cdx.json"), "utf8"));
-  assert.match(sbom.serialNumber, /^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu);
+  const [manifest, sbom] = await Promise.all([
+    readFile(path.join(root, "package.json"), "utf8").then(JSON.parse),
+    readFile(path.join(root, "sbom.cdx.json"), "utf8").then(JSON.parse),
+  ]);
+  assert.match(sbom.serialNumber, /^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu);
+  assert.equal(sbom.metadata?.timestamp, undefined);
   assert.equal(sbom.metadata?.component?.name, "fundosmart-community");
-  assert.equal(sbom.metadata?.component?.purl, "pkg:npm/fundosmart-community@0.1.0");
+  assert.equal(sbom.metadata?.component?.version, manifest.version);
+  assert.equal(sbom.metadata?.component?.purl, `pkg:npm/fundosmart-community@${manifest.version}`);
+  assert.equal(
+    sbom.metadata?.properties?.find((property) => property.name === "fundosmart:sbom:optional-policy")?.value,
+    "full-lockfile",
+  );
 
-  const components = new Map(sbom.components.map((component) => [component.purl, component]));
-  for (const purl of ["pkg:npm/%40turf/jsts@2.7.2", "pkg:npm/jsts@2.7.1"]) {
+  const components = new Map(sbom.components.map((component) => [
+    component.properties.find((property) => property.name === "cdx:npm:package:path")?.value,
+    component,
+  ]));
+  for (const packagePath of ["node_modules/@turf/jsts", "node_modules/jsts"]) {
     assert.equal(
-      components.get(purl)?.licenses?.[0]?.license?.name,
+      components.get(packagePath)?.licenses?.[0]?.license?.name,
       "Eclipse Distribution License 1.0",
-      `${purl} must retain its upstream EDL license evidence`,
+      `${packagePath} must retain its upstream EDL license evidence`,
     );
   }
   assert.equal(
-    components.get("pkg:npm/splaytree-ts@1.0.2")?.licenses?.[0]?.license?.id,
+    components.get("node_modules/splaytree-ts")?.licenses?.[0]?.license?.id,
     "BSD-3-Clause",
   );
 });
