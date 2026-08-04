@@ -1,11 +1,20 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { isIP } from "node:net";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { parseEnv } from "node:util";
+
+import { verifySelfHostingAttestation } from "./self-hosting-attestation.mjs";
+import { readStrictDotEnvFile } from "./self-hosting-env-files.mjs";
+import {
+  readGitStatus,
+  readHeadSha,
+  validateSelfHostingEnvironmentSelection,
+} from "./self-hosting-preflight.mjs";
 
 const DEFAULT_ATTEMPTS = 10;
 const DEFAULT_TIMEOUT_MS = 15_000;
-const DEFAULT_ENV_FILE = ".env.production.local";
+const ALLOWED_ENVIRONMENTS = new Set(["staging", "production"]);
+const RELEASE_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
+const RESERVED_HOSTNAME = /(?:^localhost$|\.localhost$|\.(?:local|test|invalid|example|workers\.dev)$)/u;
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -17,7 +26,7 @@ async function responseText(response, label) {
   return text;
 }
 
-async function smokeAttempt({ baseUrl, fetchImpl, timeoutMs }) {
+async function smokeAttempt({ baseUrl, expectedEnvironment, expectedRelease, fetchImpl, timeoutMs }) {
   const request = (pathname, init = {}) => fetchImpl(new URL(pathname, baseUrl), {
     redirect: "manual",
     signal: AbortSignal.timeout(timeoutMs),
@@ -27,6 +36,23 @@ async function smokeAttempt({ baseUrl, fetchImpl, timeoutMs }) {
   const landing = await request("/");
   const landingHtml = await responseText(landing, "Landing page");
   assert(landingHtml.includes("FundoSmart"), "Landing page does not contain the FundoSmart marker.");
+
+  const health = await request("/healthz");
+  assert(health.status === 200, `Health endpoint returned ${health.status} instead of 200.`);
+  const healthPayload = await health.json();
+  assert(
+    healthPayload && typeof healthPayload === "object" && !Array.isArray(healthPayload),
+    "Health endpoint did not return a JSON object.",
+  );
+  assert(healthPayload.status === "ok", "Health endpoint did not report an operational database.");
+  assert(
+    healthPayload.environment === expectedEnvironment,
+    `Health endpoint reported ${healthPayload.environment ?? "no environment"} instead of ${expectedEnvironment}.`,
+  );
+  assert(
+    healthPayload.release === expectedRelease,
+    `Health endpoint reported release ${healthPayload.release ?? "unknown"} instead of ${expectedRelease}.`,
+  );
 
   const googleAuth = await request("/auth/google?returnTo=%2Fapp");
   assert(googleAuth.status === 303, `Google auth start returned ${googleAuth.status} instead of 303.`);
@@ -111,6 +137,7 @@ async function smokeAttempt({ baseUrl, fetchImpl, timeoutMs }) {
 
   return {
     landingStatus: landing.status,
+    healthStatus: health.status,
     googleAuthStatus: googleAuth.status,
     anonymousApiStatus: anonymousApi.status,
     demoStatus: demo.status,
@@ -122,19 +149,32 @@ async function smokeAttempt({ baseUrl, fetchImpl, timeoutMs }) {
 
 export async function smokeRelease({
   baseUrl,
+  expectedEnvironment,
+  expectedRelease,
   fetchImpl = fetch,
   attempts = DEFAULT_ATTEMPTS,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   sleep = (milliseconds) => new Promise((resolveSleep) => setTimeout(resolveSleep, milliseconds)),
 } = {}) {
-  const normalizedBaseUrl = new URL(String(baseUrl ?? ""));
-  assert(normalizedBaseUrl.protocol === "https:", "Release smoke tests require an HTTPS base URL.");
-  assert(Number.isInteger(attempts) && attempts > 0 && attempts <= 10, "Smoke attempts must be between 1 and 10.");
+  const normalizedBaseUrl = parseExactPublicHttpsOrigin(baseUrl, "Release smoke target");
+  assert(ALLOWED_ENVIRONMENTS.has(expectedEnvironment), "Release smoke tests require the selected deployment environment.");
+  assert(
+    typeof expectedRelease === "string" && RELEASE_SHA.test(expectedRelease),
+    "Release smoke tests require the lowercase full release SHA.",
+  );
+  assert(Number.isSafeInteger(attempts) && attempts > 0 && attempts <= 10, "Smoke attempts must be between 1 and 10.");
+  assert(Number.isSafeInteger(timeoutMs) && timeoutMs > 0, "Smoke timeout must be a positive safe integer.");
 
   let lastError;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      const result = await smokeAttempt({ baseUrl: normalizedBaseUrl, fetchImpl, timeoutMs });
+      const result = await smokeAttempt({
+        baseUrl: normalizedBaseUrl,
+        expectedEnvironment,
+        expectedRelease,
+        fetchImpl,
+        timeoutMs,
+      });
       process.stdout.write(`Smoke test passed for ${normalizedBaseUrl.origin} on attempt ${attempt}.\n`);
       return { ...result, attempts: attempt, origin: normalizedBaseUrl.origin };
     } catch (error) {
@@ -151,27 +191,165 @@ export async function smokeRelease({
   );
 }
 
-export async function loadSelfHostingSmokeConfiguration({ envFile = DEFAULT_ENV_FILE } = {}) {
-  const variables = parseEnv(await readFile(resolve(envFile), "utf8"));
+export async function loadSelfHostingSmokeConfiguration({
+  cwd = process.cwd(),
+  expectedEnvironment,
+  envFile,
+  attestationFile,
+  readCurrentHeadSha = () => readHeadSha({ cwd }),
+  readCurrentGitStatus = () => readGitStatus({ cwd }),
+} = {}) {
+  const selectedEnvironment = String(expectedEnvironment ?? "").trim().toLowerCase();
+  assert(
+    ALLOWED_ENVIRONMENTS.has(selectedEnvironment),
+    "Self-hosting smoke requires an explicit staging or production environment selection.",
+  );
+  const environmentPath = path.resolve(cwd, envFile ?? `.env.${selectedEnvironment}.local`);
+  const canonicalAttestationPath = path.resolve(
+    cwd,
+    ".wrangler",
+    "self-hosting",
+    `${selectedEnvironment}.attestation.json`,
+  );
+  if (attestationFile !== undefined
+    && !sameResolvedPath(path.resolve(cwd, attestationFile), canonicalAttestationPath)) {
+    throw new Error("Self-hosting smoke only accepts the canonical attestation for the selected environment.");
+  }
+
+  const loadedEnvironment = await readStrictDotEnvFile(environmentPath, {
+    label: "deployment environment file",
+  });
+  const variables = loadedEnvironment.values;
+  requireLiteralSmokeValues(loadedEnvironment.bytes, variables);
+  validateSelfHostingEnvironmentSelection({
+    expectedEnvironment: selectedEnvironment,
+    variables,
+    envFile: environmentPath,
+  });
+
   const origins = [
-    variables.NEXT_PUBLIC_APP_URL,
-    variables.FUNDOSMART_APP_BASE_URL,
-    variables.FUNDOSMART_BASE_URL,
-  ].map((value) => String(value ?? "").trim());
-  if (origins.some((value) => !value) || new Set(origins).size !== 1) {
+    ["NEXT_PUBLIC_APP_URL", variables.NEXT_PUBLIC_APP_URL],
+    ["FUNDOSMART_APP_BASE_URL", variables.FUNDOSMART_APP_BASE_URL],
+    ["FUNDOSMART_BASE_URL", variables.FUNDOSMART_BASE_URL],
+  ].map(([key, value]) => parseExactPublicHttpsOrigin(value, key).origin);
+  if (new Set(origins).size !== 1) {
     throw new Error("The smoke target must match every deployment origin in the selected environment file.");
   }
-  const attempts = Number.parseInt(variables.FUNDOSMART_SMOKE_ATTEMPTS ?? String(DEFAULT_ATTEMPTS), 10);
-  return { baseUrl: origins[0], attempts };
+
+  const attempts = parseSmokeAttempts(variables.FUNDOSMART_SMOKE_ATTEMPTS);
+  const releaseSha = String(variables.FUNDOSMART_RELEASE_SHA ?? "").trim();
+  assert(RELEASE_SHA.test(releaseSha), "The smoke target must declare the lowercase full release SHA.");
+  const [currentHeadSha, currentGitStatus] = await Promise.all([
+    readCurrentHeadSha(),
+    readCurrentGitStatus(),
+  ]);
+  assert(
+    typeof currentHeadSha === "string" && currentHeadSha.trim().toLowerCase() === releaseSha,
+    "The smoke target release SHA must match the exact current Git HEAD.",
+  );
+  assert(
+    typeof currentGitStatus === "string" && currentGitStatus.trim() === "",
+    "The Git index and working tree must be clean before verifying a deployment smoke target.",
+  );
+
+  await verifySelfHostingAttestation({
+    attestationPath: canonicalAttestationPath,
+    releaseSha,
+    environment: selectedEnvironment,
+    envBytes: loadedEnvironment.bytes,
+    distPath: path.resolve(cwd, "dist"),
+    configRelativePath: "server/wrangler.json",
+    migrationsPath: path.resolve(cwd, "drizzle"),
+    gitCwd: cwd,
+    migrationsRelativePath: "drizzle",
+  });
+
+  return {
+    baseUrl: origins[0],
+    attempts,
+    expectedEnvironment: selectedEnvironment,
+    expectedRelease: releaseSha,
+  };
+}
+
+function parseSmokeAttempts(value) {
+  if (value === undefined) return DEFAULT_ATTEMPTS;
+  const raw = String(value);
+  if (!/^(?:[1-9]|10)$/u.test(raw)) {
+    throw new Error("FUNDOSMART_SMOKE_ATTEMPTS must be a canonical integer between 1 and 10.");
+  }
+  const attempts = Number(raw);
+  if (!Number.isSafeInteger(attempts)) {
+    throw new Error("FUNDOSMART_SMOKE_ATTEMPTS must be a safe JSON integer.");
+  }
+  return attempts;
+}
+
+function requireLiteralSmokeValues(bytes, variables) {
+  const requiredLiteralKeys = new Set([
+    "NEXT_PUBLIC_APP_URL",
+    "FUNDOSMART_APP_BASE_URL",
+    "FUNDOSMART_BASE_URL",
+    "FUNDOSMART_DEPLOY_ENVIRONMENT",
+    "FUNDOSMART_RELEASE_SHA",
+    ...(Object.hasOwn(variables, "FUNDOSMART_SMOKE_ATTEMPTS") ? ["FUNDOSMART_SMOKE_ATTEMPTS"] : []),
+  ]);
+  const source = Buffer.from(bytes).toString("utf8");
+  for (const line of source.split(/\r?\n/u)) {
+    if (!line || line.startsWith("#")) continue;
+    const separator = line.indexOf("=");
+    const key = line.slice(0, separator);
+    if (requiredLiteralKeys.has(key) && line.slice(separator + 1) !== variables[key]) {
+      throw new Error(`${key} must use one literal dotenv value without quoting, comments or parser-dependent syntax.`);
+    }
+  }
+}
+
+function parseExactPublicHttpsOrigin(value, label) {
+  const raw = String(value ?? "").trim();
+  try {
+    const url = new URL(raw);
+    const hostname = url.hostname.toLowerCase();
+    if (url.protocol !== "https:" || url.username || url.password || url.port
+      || url.pathname !== "/" || url.search || url.hash
+      || (raw !== url.origin && raw !== `${url.origin}/`)
+      || !hostname || isIP(hostname) || RESERVED_HOSTNAME.test(hostname) || !hostname.includes(".")) {
+      throw new Error("not an exact public HTTPS origin");
+    }
+    return new URL(url.origin);
+  } catch {
+    throw new Error(`${label} must be an exact public HTTPS origin with no credentials, port, path, query or fragment.`);
+  }
 }
 
 function parseArguments(args) {
-  if (args.length === 0) return { envFile: DEFAULT_ENV_FILE };
-  if (args.length === 2 && args[0] === "--env-file" && args[1]) return { envFile: args[1] };
-  throw new Error("Usage: node scripts/release/smoke.mjs [--env-file <path>]");
+  const options = {};
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    const key = new Map([
+      ["--environment", "expectedEnvironment"],
+      ["--env-file", "envFile"],
+    ]).get(argument);
+    const value = args[index + 1];
+    if (!key || !value || Object.hasOwn(options, key)) {
+      throw new Error("Usage: node scripts/release/smoke.mjs --environment <staging|production> [--env-file <path>]");
+    }
+    options[key] = value;
+    index += 1;
+  }
+  if (!Object.hasOwn(options, "expectedEnvironment")) {
+    throw new Error("Usage: node scripts/release/smoke.mjs --environment <staging|production> [--env-file <path>]");
+  }
+  return options;
 }
 
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+function sameResolvedPath(left, right) {
+  return process.platform === "win32"
+    ? left.toLowerCase() === right.toLowerCase()
+    : left === right;
+}
+
+if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
   Promise.resolve()
     .then(() => loadSelfHostingSmokeConfiguration(parseArguments(process.argv.slice(2))))
     .then((configuration) => smokeRelease(configuration))

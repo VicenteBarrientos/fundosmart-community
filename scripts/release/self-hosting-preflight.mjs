@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { parseEnv } from "node:util";
+
+import { readStrictDotEnvFile } from "./self-hosting-env-files.mjs";
 
 const DEFAULT_ENV_FILE = ".env.production.local";
 const DEFAULT_SECRETS_FILE = ".wrangler/community.production.secrets.env";
@@ -12,6 +13,14 @@ const PLACEHOLDER = /(?:replace|placeholder|change[-_ ]?me|example\.(?:com|org|n
 const SAFE_NAME = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const RELEASE_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/iu;
+const ALLOWED_GIT_ENVIRONMENT_KEYS = Object.freeze([
+  "PATH",
+  "PATHEXT",
+  "SYSTEMROOT",
+  "COMSPEC",
+  "TEMP",
+  "TMP",
+]);
 
 export const SELF_HOSTING_BUILD_VARIABLE_KEYS = Object.freeze([
   "NEXT_PUBLIC_APP_URL",
@@ -23,6 +32,7 @@ export const SELF_HOSTING_BUILD_VARIABLE_KEYS = Object.freeze([
   "FUNDOSMART_D1_DATABASE_NAME",
   "FUNDOSMART_D1_DATABASE_ID",
   "FUNDOSMART_R2_BUCKET_NAME",
+  "FUNDOSMART_DATA_JURISDICTION",
   "CLOUDFLARE_ACCOUNT_ID",
   "FUNDOSMART_ENABLE_AI",
   "FUNDOSMART_ENABLE_REMOTE_AI",
@@ -74,6 +84,26 @@ export async function loadSelfHostingConfiguration({
     readEnvironmentFile(secretsPath, "secrets file"),
   ]);
   return { variables, secrets, environmentPath, secretsPath };
+}
+
+export function validateSelfHostingEnvironmentSelection({
+  expectedEnvironment,
+  variables,
+  envFile,
+  secretsFile,
+} = {}) {
+  const issues = [];
+  const environment = normalized(expectedEnvironment);
+  if (!new Set(["staging", "production"]).has(environment)) {
+    issues.push("The wrapper requires an explicit staging or production environment selection.");
+  }
+  if (normalized(variables?.FUNDOSMART_DEPLOY_ENVIRONMENT) !== environment) {
+    issues.push("The explicit environment selection does not match FUNDOSMART_DEPLOY_ENVIRONMENT.");
+  }
+  validateEnvironmentFileName(envFile, environment, "deployment environment file", issues);
+  if (secretsFile) validateEnvironmentFileName(secretsFile, environment, "secrets file", issues);
+  if (issues.length > 0) throw new SelfHostingPreflightError(issues);
+  return environment;
 }
 
 export function validateSelfHostingEnvironment({
@@ -149,6 +179,11 @@ export function validateSelfHostingEnvironment({
   const databaseId = normalized(vars.FUNDOSMART_D1_DATABASE_ID);
   if (databaseId && (!UUID.test(databaseId) || /^0+-(?:0+-){3}0+$/u.test(databaseId))) {
     issues.push("FUNDOSMART_D1_DATABASE_ID must be the UUID returned by wrangler d1 create.");
+  }
+
+  const dataJurisdiction = normalized(vars.FUNDOSMART_DATA_JURISDICTION);
+  if (!new Set(["", "eu", "fedramp"]).has(dataJurisdiction)) {
+    issues.push("FUNDOSMART_DATA_JURISDICTION must be empty, eu or fedramp.");
   }
 
   const accountId = normalized(vars.CLOUDFLARE_ACCOUNT_ID);
@@ -254,15 +289,18 @@ export function validateSelfHostingEnvironment({
     issues.push("OFFLINE_SESSION_SECRET, ASSISTANT_CONFIRMATION_SECRET and AI_KEYS_ENCRYPTION_SECRET must be distinct values.");
   }
 
-  const hasCdseClient = Boolean(normalized(privateValues.CDSE_CLIENT_ID));
-  const hasCdseSecret = Boolean(normalized(privateValues.CDSE_CLIENT_SECRET));
-  if (hasCdseClient !== hasCdseSecret) {
-    issues.push("CDSE_CLIENT_ID and CDSE_CLIENT_SECRET must be configured together or both omitted.");
+  const hasCdseClientKey = Object.hasOwn(privateValues, "CDSE_CLIENT_ID");
+  const hasCdseSecretKey = Object.hasOwn(privateValues, "CDSE_CLIENT_SECRET");
+  const cdseClient = normalized(privateValues.CDSE_CLIENT_ID);
+  const cdseSecret = normalized(privateValues.CDSE_CLIENT_SECRET);
+  const hasCompleteCdsePair = hasCdseClientKey && hasCdseSecretKey && cdseClient && cdseSecret;
+  if ((hasCdseClientKey || hasCdseSecretKey) && !hasCompleteCdsePair) {
+    issues.push("CDSE_CLIENT_ID and CDSE_CLIENT_SECRET must both be omitted or both contain non-empty values.");
   }
-  if (hasCdseClient && PLACEHOLDER.test(privateValues.CDSE_CLIENT_ID)) {
+  if (hasCompleteCdsePair && PLACEHOLDER.test(cdseClient)) {
     issues.push("CDSE_CLIENT_ID must be the value issued for this installation, not a placeholder.");
   }
-  if (hasCdseSecret) validateNonPlaceholderSecret(privateValues, "CDSE_CLIENT_SECRET", issues);
+  if (hasCompleteCdsePair) validateNonPlaceholderSecret(privateValues, "CDSE_CLIENT_SECRET", issues);
 
   if (issues.length > 0) throw new SelfHostingPreflightError(issues);
   return {
@@ -296,64 +334,103 @@ export function validateBuiltWorkerConfig({ config, variables, secrets } = {}) {
   }
 
   const databases = workerConfig.d1_databases ?? [];
-  const database = databases.find((binding) => binding.binding === "DB");
-  if (databases.length !== 1 || !database || database.database_name !== normalized(vars.FUNDOSMART_D1_DATABASE_NAME)
-    || database.database_id !== normalized(vars.FUNDOSMART_D1_DATABASE_ID)) {
+  const expectedDatabaseBinding = {
+    binding: "DB",
+    database_name: normalized(vars.FUNDOSMART_D1_DATABASE_NAME),
+    database_id: normalized(vars.FUNDOSMART_D1_DATABASE_ID),
+    migrations_dir: "../../drizzle",
+  };
+  if (!sameJsonValue(databases, [expectedDatabaseBinding])) {
     issues.push("Built DB binding does not match the installation-owned D1 database.");
   }
   const buckets = workerConfig.r2_buckets ?? [];
-  const bucket = buckets.find((binding) => binding.binding === "FILES");
-  if (buckets.length !== 1 || !bucket || bucket.bucket_name !== normalized(vars.FUNDOSMART_R2_BUCKET_NAME)) {
+  const dataJurisdiction = normalized(vars.FUNDOSMART_DATA_JURISDICTION);
+  const expectedBucketBinding = {
+    binding: "FILES",
+    bucket_name: normalized(vars.FUNDOSMART_R2_BUCKET_NAME),
+    ...(dataJurisdiction ? { jurisdiction: dataJurisdiction } : {}),
+  };
+  if (!sameJsonValue(buckets, [expectedBucketBinding])) {
     issues.push("Built FILES binding does not match the installation-owned R2 bucket.");
   }
-  if (workerConfig.images?.binding !== "IMAGES") issues.push("Built Worker is missing the IMAGES binding.");
-  if (workerConfig.assets?.binding !== "ASSETS") issues.push("Built Worker is missing the ASSETS binding.");
+  if (!sameJsonValue(workerConfig.images, { binding: "IMAGES" })) {
+    issues.push("Built Worker IMAGES binding is not canonical.");
+  }
+  if (!sameStringRecord(workerConfig.assets, { binding: "ASSETS", directory: "../client" })) {
+    issues.push("Built Worker ASSETS binding must target the verified ../client directory.");
+  }
+  if (workerConfig.topLevelName !== normalized(vars.FUNDOSMART_WORKER_NAME)) {
+    issues.push("Built Worker top-level name does not match FUNDOSMART_WORKER_NAME.");
+  }
+  if (workerConfig.main !== "index.js" || workerConfig.no_bundle !== true) {
+    issues.push("Built Worker entrypoint must be the verified unbundled index.js artifact.");
+  }
+  if (workerConfig.compatibility_date !== "2026-07-18"
+    || !Array.isArray(workerConfig.compatibility_flags)
+    || workerConfig.compatibility_flags.length !== 1
+    || workerConfig.compatibility_flags[0] !== "nodejs_compat") {
+    issues.push("Built Worker compatibility settings do not match the reviewed release configuration.");
+  }
   if (workerConfig.workers_dev !== false || workerConfig.preview_urls !== false) {
     issues.push("Built Worker must disable workers.dev and preview URLs for a remote installation.");
   }
   const deploymentHostname = new URL(normalized(vars.FUNDOSMART_APP_BASE_URL)).hostname;
-  if (workerConfig.routes?.length !== 1
-    || workerConfig.routes[0]?.pattern !== deploymentHostname
-    || workerConfig.routes[0]?.custom_domain !== true) {
+  const expectedRoutes = [{ pattern: deploymentHostname, custom_domain: true }];
+  if (!sameJsonValue(workerConfig.routes, expectedRoutes)) {
     issues.push("Built Worker must contain exactly the installation custom domain route.");
   }
-  if (workerConfig.observability?.enabled !== true
-    || workerConfig.observability?.logs?.enabled !== true
-    || workerConfig.observability?.traces?.enabled !== true) {
+  const expectedObservability = {
+    enabled: true,
+    logs: { enabled: true, head_sampling_rate: 1, invocation_logs: true },
+    traces: { enabled: true, head_sampling_rate: 0.05 },
+  };
+  if (!sameJsonValue(workerConfig.observability, expectedObservability)) {
     issues.push("Built Worker must retain the documented observability configuration.");
   }
-  if (workerConfig.triggers?.crons?.length !== 1 || workerConfig.triggers.crons[0] !== "17 */6 * * *") {
+  const expectedTriggers = { crons: ["17 */6 * * *"] };
+  if (!sameJsonValue(workerConfig.triggers, expectedTriggers)) {
     issues.push("Built Worker must retain the scheduled maintenance trigger.");
   }
 
   const aiEnabled = normalized(vars.FUNDOSMART_ENABLE_AI) === "true";
-  if (aiEnabled !== (workerConfig.ai?.binding === "AI")) {
+  const expectedAiBinding = aiEnabled ? { binding: "AI" } : undefined;
+  if (!sameJsonValue(workerConfig.ai, expectedAiBinding)) {
     issues.push("Built AI binding does not match FUNDOSMART_ENABLE_AI.");
   }
   const analyticsEnabled = normalized(vars.FUNDOSMART_ENABLE_ANALYTICS) === "true";
-  const analyticsBindings = new Map(
-    (workerConfig.analytics_engine_datasets ?? []).map((binding) => [binding.binding, binding.dataset]),
-  );
-  if (analyticsEnabled) {
-    if (analyticsBindings.get("METRICS") !== normalized(vars.FUNDOSMART_METRICS_DATASET)
-      || analyticsBindings.get("MAP_USAGE") !== normalized(vars.FUNDOSMART_MAP_USAGE_DATASET)) {
-      issues.push("Built Analytics Engine bindings do not match the configured datasets.");
-    }
-  } else if (analyticsBindings.size > 0) {
-    issues.push("Built Worker contains Analytics Engine bindings while analytics is disabled.");
+  const expectedAnalyticsBindings = analyticsEnabled
+    ? [
+        { binding: "METRICS", dataset: normalized(vars.FUNDOSMART_METRICS_DATASET) },
+        { binding: "MAP_USAGE", dataset: normalized(vars.FUNDOSMART_MAP_USAGE_DATASET) },
+      ]
+    : [];
+  if (!sameJsonValue(workerConfig.analytics_engine_datasets, expectedAnalyticsBindings)) {
+    issues.push("Built Analytics Engine bindings do not exactly match the configured datasets.");
   }
 
   const emailEnabled = Boolean(normalized(vars.FUNDOSMART_EMAIL_FROM));
-  const emailBindings = workerConfig.send_email ?? [];
-  const emailBinding = emailBindings.find((binding) => binding.name === "EMAIL");
   const expectedSender = normalized(vars.FUNDOSMART_EMAIL_FROM);
-  if (emailEnabled
-    ? emailBindings.length !== 1
-      || !emailBinding
-      || emailBinding.allowed_sender_addresses?.length !== 1
-      || emailBinding.allowed_sender_addresses[0] !== expectedSender
-    : emailBindings.length > 0) {
+  const expectedEmailBindings = emailEnabled
+    ? [{ name: "EMAIL", allowed_sender_addresses: [expectedSender] }]
+    : [];
+  if (!sameJsonValue(workerConfig.send_email, expectedEmailBindings)) {
     issues.push("Built EMAIL binding does not match FUNDOSMART_EMAIL_FROM.");
+  }
+
+  const expectedManifest = expectedBuiltWorkerManifest({
+    vars,
+    expectedWorkerVariables,
+    expectedDatabaseBinding,
+    expectedBucketBinding,
+    expectedRoutes,
+    expectedObservability,
+    expectedTriggers,
+    expectedAiBinding,
+    expectedAnalyticsBindings,
+    expectedEmailBindings,
+  });
+  if (!sameJsonValue(workerConfig, expectedManifest)) {
+    issues.push("Built Worker manifest does not exactly match the canonical remote Vite output.");
   }
 
   const serialized = JSON.stringify(workerConfig);
@@ -416,7 +493,8 @@ function parseArguments(args) {
 
 async function readEnvironmentFile(filePath, label) {
   try {
-    return parseEnv(await readFile(filePath, "utf8"));
+    const result = await readStrictDotEnvFile(filePath, { label });
+    return result.values;
   } catch (error) {
     throw new Error(`Could not read the ${label} at ${path.relative(process.cwd(), filePath)}.`, { cause: error });
   }
@@ -424,9 +502,18 @@ async function readEnvironmentFile(filePath, label) {
 
 export function readHeadSha({ cwd = process.cwd() } = {}) {
   try {
-    return execFileSync("git", ["rev-parse", "HEAD"], {
+    return execFileSync("git", [
+      "--no-replace-objects",
+      "--literal-pathspecs",
+      "-c",
+      "core.fsmonitor=false",
+      "rev-parse",
+      "--verify",
+      "HEAD^{commit}",
+    ], {
       cwd,
       encoding: "utf8",
+      env: createSanitizedGitEnvironment(),
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
   } catch {
@@ -436,14 +523,44 @@ export function readHeadSha({ cwd = process.cwd() } = {}) {
 
 export function readGitStatus({ cwd = process.cwd() } = {}) {
   try {
-    return execFileSync("git", ["status", "--porcelain=v1", "--untracked-files=all"], {
+    return execFileSync("git", [
+      "--no-replace-objects",
+      "--literal-pathspecs",
+      "-c",
+      "core.fsmonitor=false",
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all",
+    ], {
       cwd,
       encoding: "utf8",
+      env: createSanitizedGitEnvironment(),
       stdio: ["ignore", "pipe", "ignore"],
     });
   } catch {
     return undefined;
   }
+}
+
+function createSanitizedGitEnvironment(environment = process.env) {
+  const sanitized = {};
+  const entries = Object.entries(environment);
+  for (const expectedKey of ALLOWED_GIT_ENVIRONMENT_KEYS) {
+    const matches = entries.filter(([key]) => key.toUpperCase() === expectedKey);
+    if (matches.length > 1 && matches.some(([, value]) => value !== matches[0][1])) {
+      throw new Error(`Host environment contains conflicting values for ${expectedKey}.`);
+    }
+    if (typeof matches[0]?.[1] === "string") sanitized[expectedKey] = matches[0][1];
+  }
+  sanitized.GIT_CONFIG_GLOBAL = process.platform === "win32" ? "NUL" : "/dev/null";
+  sanitized.GIT_CONFIG_NOSYSTEM = "1";
+  sanitized.GIT_ATTR_NOSYSTEM = "1";
+  sanitized.GIT_NO_LAZY_FETCH = "1";
+  sanitized.GIT_NO_REPLACE_OBJECTS = "1";
+  sanitized.GIT_OPTIONAL_LOCKS = "0";
+  sanitized.GIT_TERMINAL_PROMPT = "0";
+  sanitized.LC_ALL = "C";
+  return sanitized;
 }
 
 function normalized(value) {
@@ -475,6 +592,111 @@ function sameStringRecord(actual, expected) {
   const actualEntries = Object.entries(actual).sort(([left], [right]) => left.localeCompare(right));
   const expectedEntries = Object.entries(expected).sort(([left], [right]) => left.localeCompare(right));
   return JSON.stringify(actualEntries) === JSON.stringify(expectedEntries);
+}
+
+function expectedBuiltWorkerManifest({
+  vars,
+  expectedWorkerVariables,
+  expectedDatabaseBinding,
+  expectedBucketBinding,
+  expectedRoutes,
+  expectedObservability,
+  expectedTriggers,
+  expectedAiBinding,
+  expectedAnalyticsBindings,
+  expectedEmailBindings,
+}) {
+  const workerName = normalized(vars.FUNDOSMART_WORKER_NAME);
+  return {
+    topLevelName: workerName,
+    dev: {
+      ip: "127.0.0.1",
+      local_protocol: "http",
+      upstream_protocol: "http",
+      enable_containers: true,
+      generate_types: false,
+    },
+    name: workerName,
+    compatibility_date: "2026-07-18",
+    compatibility_flags: ["nodejs_compat"],
+    vars: expectedWorkerVariables,
+    durable_objects: { bindings: [] },
+    kv_namespaces: [],
+    queues: { producers: [], consumers: [] },
+    r2_buckets: [expectedBucketBinding],
+    d1_databases: [expectedDatabaseBinding],
+    vectorize: [],
+    ai_search_namespaces: [],
+    ai_search: [],
+    agent_memory: [],
+    hyperdrive: [],
+    workflows: [],
+    secrets_store_secrets: [],
+    artifacts: [],
+    services: [],
+    analytics_engine_datasets: expectedAnalyticsBindings,
+    images: { binding: "IMAGES" },
+    ...(expectedAiBinding ? { ai: expectedAiBinding } : {}),
+    unsafe_hello_world: [],
+    flagship: [],
+    ratelimits: [],
+    worker_loaders: [],
+    main: "index.js",
+    jsx_factory: "React.createElement",
+    jsx_fragment: "React.Fragment",
+    migrations: [],
+    exports: {},
+    triggers: expectedTriggers,
+    rules: [{ type: "ESModule", globs: ["**/*.js", "**/*.mjs"] }],
+    build: { watch_dir: "./src" },
+    no_bundle: true,
+    dispatch_namespaces: [],
+    logfwdr: { bindings: [] },
+    assets: { binding: "ASSETS", directory: "../client" },
+    observability: expectedObservability,
+    python_modules: { exclude: ["**/*.pyc"] },
+    define: {},
+    cloudchamber: {},
+    send_email: expectedEmailBindings,
+    mtls_certificates: [],
+    pipelines: [],
+    vpc_services: [],
+    vpc_networks: [],
+    account_id: normalized(vars.CLOUDFLARE_ACCOUNT_ID),
+    workers_dev: false,
+    preview_urls: false,
+    routes: expectedRoutes,
+  };
+}
+
+function sameJsonValue(actual, expected) {
+  if (Object.is(actual, expected)) return true;
+  if (Array.isArray(actual) || Array.isArray(expected)) {
+    return Array.isArray(actual)
+      && Array.isArray(expected)
+      && actual.length === expected.length
+      && actual.every((value, index) => sameJsonValue(value, expected[index]));
+  }
+  if (!actual || !expected || typeof actual !== "object" || typeof expected !== "object") return false;
+  const actualKeys = Object.keys(actual).sort();
+  const expectedKeys = Object.keys(expected).sort();
+  return actualKeys.length === expectedKeys.length
+    && actualKeys.every((key, index) => key === expectedKeys[index]
+      && sameJsonValue(actual[key], expected[key]));
+}
+
+function validateEnvironmentFileName(filePath, environment, label, issues) {
+  if (typeof filePath !== "string" || !filePath.trim()) {
+    issues.push(`The ${label} path is required.`);
+    return;
+  }
+  const baseName = path.basename(filePath).toLowerCase();
+  const selected = new RegExp(`(?:^|[._-])${environment}(?:[._-]|$)`, "u");
+  const oppositeEnvironment = environment === "staging" ? "production" : "staging";
+  const opposite = new RegExp(`(?:^|[._-])${oppositeEnvironment}(?:[._-]|$)`, "u");
+  if (!selected.test(baseName) || opposite.test(baseName)) {
+    issues.push(`The ${label} name must identify only the selected ${environment} environment.`);
+  }
 }
 
 function parseHttpsOrigin(key, value, issues) {
