@@ -1,0 +1,36 @@
+name: Propuesta
+description: Propón una mejora, integración o contrato público.
+title: "[Propuesta]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema
+      description: ¿Qué usuario y decisión operativa se beneficiarían?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Solución propuesta
+      description: Incluye configuración, permisos, compatibilidad y experiencia esperada.
+    validations:
+      required: true
+  - type: textarea
+    id: extension
+    attributes:
+      label: Frontera de extensión
+      description: ¿Debe vivir en el core, API pública, evento o plugin?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas y riesgos
+      description: Explica otras opciones, datos implicados y posibles degradaciones.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacidad
+      options:
+        - label: La propuesta no contiene datos personales ni agrícolas reales.
+          required: true

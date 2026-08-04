@@ -1,0 +1,47 @@
+name: Error
+description: Reporta un comportamiento reproducible con datos sintéticos.
+title: "[Error]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: No incluyas credenciales, datos personales, documentos ni coordenadas de un predio real.
+  - type: textarea
+    id: description
+    attributes:
+      label: Descripción
+      description: ¿Qué ocurrió y qué esperabas?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproducción mínima
+      description: Pasos, ruta y fixture sintético mínimo.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versión
+      description: Commit, tag o versión desplegada.
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Entorno
+      options:
+        - Desarrollo local
+        - Fork autoalojado
+        - FundoSmart Cloud
+        - Otro
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacidad
+      options:
+        - label: Confirmo que reemplacé todos los datos reales por ejemplos sintéticos.
+          required: true

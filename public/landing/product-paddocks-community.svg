@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">Mapa sintético de potreros de FundoSmart</title>
+  <desc id="desc">Interfaz ilustrativa con catorce potreros rectangulares ficticios, directorio y estado de rotación.</desc>
+  <rect width="1440" height="900" fill="#eef1f2"/>
+  <rect width="1440" height="98" fill="#20262c"/>
+  <rect x="0" y="58" width="1440" height="40" fill="#2b333c"/>
+  <text x="36" y="40" fill="#f6f3e9" font-family="Arial, sans-serif" font-size="20" font-weight="700">FundoSmart</text>
+  <rect x="146" y="14" width="190" height="34" rx="8" fill="#303840" stroke="#4b555e"/>
+  <text x="166" y="37" fill="#dce6dc" font-family="Arial, sans-serif" font-size="14">Fundo El Ejemplo</text>
+  <rect x="1330" y="12" width="78" height="36" rx="9" fill="#377a11"/>
+  <text x="1353" y="36" fill="#fff" font-family="Arial, sans-serif" font-size="13" font-weight="700">Demo</text>
+  <text x="30" y="84" fill="#d9e0e3" font-family="Arial, sans-serif" font-size="13" font-weight="700">RESUMEN</text>
+  <rect x="120" y="58" width="116" height="40" fill="#397c13"/>
+  <text x="142" y="84" fill="#fff" font-family="Arial, sans-serif" font-size="13" font-weight="700">POTREROS</text>
+  <text x="264" y="84" fill="#c6cdd1" font-family="Arial, sans-serif" font-size="13" font-weight="700">GANADO</text>
+  <text x="370" y="84" fill="#c6cdd1" font-family="Arial, sans-serif" font-size="13" font-weight="700">LECHE</text>
+  <text x="460" y="84" fill="#c6cdd1" font-family="Arial, sans-serif" font-size="13" font-weight="700">COSTOS</text>
+
+  <rect x="38" y="124" width="330" height="724" rx="18" fill="#20262c"/>
+  <text x="66" y="164" fill="#fff" font-family="Arial, sans-serif" font-size="18" font-weight="700">Fundo El Ejemplo</text>
+  <text x="66" y="190" fill="#9fa9af" font-family="Arial, sans-serif" font-size="12">Geometría determinista · datos ficticios</text>
+  <rect x="64" y="218" width="278" height="44" rx="9" fill="#2b3239" stroke="#48525a"/>
+  <text x="84" y="246" fill="#aeb7bd" font-family="Arial, sans-serif" font-size="14">Buscar potrero…</text>
+  <g font-family="Arial, sans-serif" font-size="14">
+    <rect x="64" y="282" width="278" height="48" rx="8" fill="#303840"/><text x="82" y="312" fill="#fff">Potrero Demo 01</text><text x="270" y="312" fill="#aab4b9">9,30 ha</text>
+    <rect x="64" y="340" width="278" height="48" rx="8" fill="#303840"/><text x="82" y="370" fill="#fff">Potrero Demo 02</text><text x="270" y="370" fill="#aab4b9">9,30 ha</text>
+    <rect x="64" y="398" width="278" height="48" rx="8" fill="#3a741d" stroke="#9fda4a"/><text x="82" y="428" fill="#fff" font-weight="700">Potrero Demo 03</text><text x="270" y="428" fill="#e8ffd0">9,30 ha</text>
+    <rect x="64" y="456" width="278" height="48" rx="8" fill="#303840"/><text x="82" y="486" fill="#fff">Potrero Demo 04</text><text x="270" y="486" fill="#aab4b9">9,30 ha</text>
+    <rect x="64" y="514" width="278" height="48" rx="8" fill="#303840"/><text x="82" y="544" fill="#fff">Potrero Demo 05</text><text x="270" y="544" fill="#aab4b9">9,30 ha</text>
+  </g>
+  <text x="66" y="606" fill="#a5d76d" font-family="Arial, sans-serif" font-size="12" font-weight="700">POTRERO SELECCIONADO</text>
+  <text x="66" y="642" fill="#fff" font-family="Arial, sans-serif" font-size="20" font-weight="700">Potrero Demo 03</text>
+  <text x="66" y="674" fill="#adb6bb" font-family="Arial, sans-serif" font-size="13">Disponible · descanso 24 días</text>
+  <rect x="64" y="712" width="126" height="38" rx="9" fill="#8ac63f"/>
+  <text x="87" y="736" fill="#16200f" font-family="Arial, sans-serif" font-size="13" font-weight="700">Ver historial</text>
+
+  <rect x="392" y="124" width="1010" height="724" rx="18" fill="#e1e6df" stroke="#ccd3ce"/>
+  <rect x="416" y="146" width="962" height="58" rx="12" fill="#232a30"/>
+  <rect x="440" y="158" width="118" height="34" rx="8" fill="#3a7d14"/>
+  <text x="474" y="181" fill="#fff" font-family="Arial, sans-serif" font-size="13" font-weight="700">HITOS</text>
+  <rect x="570" y="158" width="172" height="34" rx="8" fill="#343d45"/>
+  <text x="592" y="181" fill="#e5eaed" font-family="Arial, sans-serif" font-size="13">MAPA SINTÉTICO</text>
+  <text x="1200" y="181" fill="#a9e668" font-family="Arial, sans-serif" font-size="13" font-weight="700">RE-CENTRAR</text>
+
+  <rect x="416" y="218" width="962" height="606" rx="12" fill="#d9e2d5"/>
+  <path d="M430 760 C610 640 700 670 860 550 S1150 420 1360 300" fill="none" stroke="#c3d0c0" stroke-width="28"/>
+  <path d="M430 760 C610 640 700 670 860 550 S1150 420 1360 300" fill="none" stroke="#f7f8f3" stroke-width="12"/>
+  <g stroke="#f7fff0" stroke-width="4">
+    <rect x="500" y="280" width="112" height="132" fill="#6c9d43"/><rect x="616" y="280" width="112" height="132" fill="#83ad55"/><rect x="732" y="280" width="112" height="132" fill="#4f8e35"/>
+    <rect x="848" y="280" width="112" height="132" fill="#79a64b"/><rect x="964" y="280" width="112" height="132" fill="#5e963c"/><rect x="1080" y="280" width="112" height="132" fill="#8db35e"/><rect x="1196" y="280" width="112" height="132" fill="#6f9f46"/>
+    <rect x="500" y="416" width="112" height="132" fill="#84ac55"/><rect x="616" y="416" width="112" height="132" fill="#659740"/><rect x="732" y="416" width="112" height="132" fill="#9aba6e"/><rect x="848" y="416" width="112" height="132" fill="#75a248"/><rect x="964" y="416" width="112" height="132" fill="#568d37"/><rect x="1080" y="416" width="112" height="132" fill="#82aa52"/><rect x="1196" y="416" width="112" height="132" fill="#689a41"/>
+  </g>
+  <g fill="#fff" font-family="Arial, sans-serif" font-size="12" font-weight="700" text-anchor="middle">
+    <text x="556" y="350">01</text><text x="672" y="350">02</text><text x="788" y="350">03</text><text x="904" y="350">04</text><text x="1020" y="350">05</text><text x="1136" y="350">06</text><text x="1252" y="350">07</text>
+    <text x="556" y="486">08</text><text x="672" y="486">09</text><text x="788" y="486">10</text><text x="904" y="486">11</text><text x="1020" y="486">12</text><text x="1136" y="486">13</text><text x="1252" y="486">14</text>
+  </g>
+  <rect x="710" y="585" width="300" height="92" rx="14" fill="#26372e" opacity="0.96"/>
+  <text x="734" y="614" fill="#dff4d2" font-family="Arial, sans-serif" font-size="14" font-weight="700">Potrero Demo 03</text>
+  <text x="734" y="640" fill="#fff" font-family="Arial, sans-serif" font-size="13">Disponible · 9,30 ha</text>
+  <text x="734" y="662" fill="#b8d6ae" font-family="Arial, sans-serif" font-size="12">Rotación sugerida en 3 días</text>
+</svg>

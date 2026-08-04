@@ -1,0 +1,47 @@
+{
+  "id": "/app",
+  "name": "FundoSmart — Gestión predial",
+  "short_name": "FundoSmart",
+  "description": "Gestión móvil de potreros, ganado, leche, sanidad y costos.",
+  "lang": "es-CL",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f7f3",
+  "theme_color": "#143b2b",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/fundosmart-ultra-min-app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/fundosmart-ultra-min-app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/fundosmart-ultra-min-app-icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Potreros",
+      "short_name": "Potreros",
+      "url": "/app/potreros",
+      "icons": [{ "src": "/fundosmart-ultra-min-app-icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Ganado",
+      "short_name": "Ganado",
+      "url": "/app/ganado",
+      "icons": [{ "src": "/fundosmart-ultra-min-app-icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

@@ -1,0 +1,85 @@
+import type { FundoSmartRecoveryJobStatus, FundoSmartRecoveryObjectStatus } from "../domain/types";
+import type { RestoreConfirmationBinding } from "./restore-confirmation-rules.mjs";
+
+export const RECOVERY_JOB_STATUSES: readonly FundoSmartRecoveryJobStatus[];
+export const RECOVERY_OBJECT_STATUSES: readonly FundoSmartRecoveryObjectStatus[];
+export const RECOVERY_MAX_OBJECT_ATTEMPTS: 3;
+export type RecoveryJobState = {
+  status: FundoSmartRecoveryJobStatus;
+  executionEnabled: boolean;
+  expectedRowCount: number;
+  appliedRowCount: number;
+  verifiedRowCount: number;
+  leaseToken?: string | null;
+  leaseExpiresAt?: string | null;
+  preRestoreBackupSha256?: string | null;
+  preRestoreBackupObjectKey?: string | null;
+};
+export type RecoveryObjectState = {
+  importJobId: string;
+  sequenceNumber: number;
+  status: FundoSmartRecoveryObjectStatus;
+  attemptCount: number;
+  wasPreexisting: boolean;
+  destinationObjectKey?: string | null;
+};
+export type PreparedRecoveryJob = {
+  id: string;
+  organizationId: string;
+  fieldId: string;
+  confirmationTokenId: string;
+  actorEmail: string;
+  backupSha256: string;
+  snapshotSha256: string;
+  planSha256: string;
+  status: "prepared";
+  executionEnabled: false;
+  expectedRowCount: number;
+  attemptCount: 0;
+  leaseToken: null;
+  leaseExpiresAt: null;
+  objectCursorImportJobId: null;
+  copiedObjectCount: 0;
+  compensationCursorImportJobId: null;
+  compensatedObjectCount: 0;
+  appliedRowCount: 0;
+  verifiedRowCount: 0;
+  preRestoreBackupObjectKey: null;
+  preRestoreBackupSha256: null;
+  postRestoreSha256: null;
+  failureCode: null;
+  preparedAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+export type PreparedRecoveryObject = {
+  id: string;
+  recoveryJobId: string;
+  importJobId: string;
+  sequenceNumber: number;
+  sha256: string;
+  sizeBytes: number;
+  status: "pending";
+  destinationObjectKey: null;
+  wasPreexisting: false;
+  attemptCount: 0;
+  lastErrorCode: null;
+  createdAt: string;
+  updatedAt: string;
+};
+export type PreparedRecoverySpec = {
+  job: PreparedRecoveryJob;
+  objects: PreparedRecoveryObject[];
+};
+export function prepareRecoveryJobSpec(input: {
+  jobId: string;
+  confirmationTokenId: string;
+  binding: RestoreConfirmationBinding;
+  originalFiles: Array<{ importJobId: string; sha256: string; fileSizeBytes: number }>;
+  expectedRowCount: number;
+  now: string;
+}): PreparedRecoverySpec;
+export function planNextRecoveryAction(job: RecoveryJobState, objects: RecoveryObjectState[], now?: string): Record<string, unknown>;
+export function recoveryJobCanTransition(current: FundoSmartRecoveryJobStatus, next: FundoSmartRecoveryJobStatus): boolean;
+export function recoveryLeaseIsClaimable(job: { leaseToken?: string | null; leaseExpiresAt?: string | null }, now?: string): boolean;
+export function sanitizeRecoveryFailure(cause: unknown, phase: string): { code: string; phase: string; retryable: boolean };

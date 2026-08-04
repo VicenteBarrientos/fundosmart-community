@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="es-CL">
+  <head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport">
+    <meta content="#143b2b" name="theme-color">
+    <meta content="noindex,nofollow" name="robots">
+    <title>Terreno sin conexión — FundoSmart</title>
+    <style>
+      * { box-sizing: border-box; }
+      html { background: #f3f6f1; color: #1d2922; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+      body { margin: 0; }
+      main { margin: auto; max-width: 68rem; padding: 1.25rem; }
+      header, section, form { background: #fff; border: 1px solid #dce4d8; border-radius: 1.25rem; box-shadow: 0 .75rem 2rem rgba(23,59,45,.06); padding: 1.15rem; }
+      header { align-items: center; display: flex; gap: 1rem; }
+      .brand { align-items: center; background: #143b2b; border-radius: .85rem; display: flex; flex: 0 0 auto; height: 3rem; justify-content: center; width: 3rem; }
+      .brand img { height: 2.1rem; width: 2.1rem; }
+      h1, h2 { letter-spacing: -.035em; margin: 0; }
+      h1 { font-size: 1.25rem; }
+      h2 { font-size: 1rem; }
+      p { margin: .25rem 0 0; }
+      .muted { color: #68736d; font-size: .72rem; line-height: 1.55; }
+      .grid { display: grid; gap: 1rem; margin-top: 1rem; }
+      .fields { display: grid; gap: .8rem; margin-top: 1rem; }
+      label { color: #536159; display: block; font-size: .7rem; font-weight: 800; }
+      input, select, textarea, button { font: inherit; }
+      input, select, textarea { background: #fafbf8; border: 1px solid #dce4d8; border-radius: .7rem; color: #1d2922; margin-top: .35rem; min-height: 2.75rem; padding: .65rem .75rem; width: 100%; }
+      textarea { min-height: 5rem; resize: vertical; }
+      button, .retry { align-items: center; background: #173b2d; border: 0; border-radius: .7rem; color: #fff; cursor: pointer; display: inline-flex; font-size: .72rem; font-weight: 850; justify-content: center; min-height: 2.75rem; padding: 0 1rem; text-decoration: none; }
+      button.secondary { background: #edf4e8; color: #173b2d; }
+      button:disabled { cursor: not-allowed; opacity: .45; }
+      .actions { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 1rem; }
+      #message { background: #edf4e8; border-radius: .75rem; color: #285b3e; font-size: .72rem; font-weight: 750; margin-top: 1rem; padding: .8rem 1rem; }
+      #message[data-error="true"] { background: #fff3d7; color: #815b12; }
+      #summary { color: #68736d; font-size: .68rem; font-weight: 750; margin-left: auto; }
+      .privacy { border: 0; box-shadow: none; color: #68736d; font-size: .68rem; line-height: 1.55; }
+      [hidden] { display: none !important; }
+      @media (min-width: 760px) { main { padding: 2rem; } .grid { grid-template-columns: 1fr 1fr; } .fields.two { grid-template-columns: 1fr 1fr; } header, section, form { padding: 1.5rem; } }
+    </style>
+    <script defer src="/offline-capture.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="brand"><img alt="FundoSmart" height="34" src="/fundosmart-ultra-min-favicon.svg" width="34"></div>
+        <div><h1>Captura de terreno sin conexión</h1><p class="muted">Shell local: no contiene páginas RSC, respuestas privadas, correos ni cookies.</p></div>
+        <p id="summary">Sin partición seleccionada</p>
+      </header>
+
+      <section style="margin-top:1rem">
+        <h2>Partición local</h2>
+        <p class="muted">Si este dispositivo conserva más de una cuenta o fundo, debes escoger uno antes de escribir.</p>
+        <label style="margin-top:.8rem">Cuenta y fundo<select id="scope"><option value="">Cargando almacenamiento local…</option></select></label>
+        <div class="actions"><button disabled id="sync" type="button">Sincronizar selección</button><a class="retry" href="/app/ganado">Reintentar producto</a></div>
+        <p aria-live="polite" id="message">Abriendo IndexedDB particionado…</p>
+      </section>
+
+      <div class="grid">
+        <form hidden id="capture-form">
+          <h2>Pesaje, sanidad, celo o movimiento</h2>
+          <p class="muted">La cola usa el mismo contrato idempotente de <code>/api/sync</code>.</p>
+          <div class="fields two">
+            <label>Tipo<select id="entity"><option value="livestock_weighing">Pesaje</option><option value="livestock_health">Evento sanitario</option><option value="livestock_estrus">Celo observado</option><option value="livestock_movement">Movimiento para FMA</option></select></label>
+            <label>Animal<select id="animal" required><option value="">Selecciona DIIO</option></select></label>
+            <label id="lot-row">Lote individual<select id="lot"><option value="">Selecciona lote</option></select></label>
+            <label id="weight-row">Peso kg<input id="weight" inputmode="decimal" max="2000" min="0.1" step="0.1" type="number"></label>
+            <label>Fecha<input id="date" required type="date"></label>
+            <label hidden id="product-row">Producto<input id="product" maxlength="160"></label>
+            <label hidden id="rup-row">RUP destino<input id="rup" maxlength="32"></label>
+          </div>
+          <label hidden id="detail-row" style="margin-top:.8rem">Detalle<textarea id="detail" maxlength="2000"></textarea></label>
+          <label style="margin-top:.8rem">Foto opcional, máx. 1,5 MB<input accept="image/jpeg,image/png,image/webp,image/heic" capture="environment" id="photo" type="file"></label>
+          <div class="actions"><button type="submit">Guardar en este dispositivo</button></div>
+        </form>
+
+        <form hidden id="landmark-form">
+          <h2>Hito GPS puntual</h2>
+          <p class="muted">Disponible sólo cuando Potreros dejó una capa local exacta para este fundo. La edición de polígonos permanece en el mapa completo.</p>
+          <div class="fields two">
+            <label>Tipo<select id="kind"><option value="bebedero">Bebedero</option><option value="porton">Portón</option><option value="sala_ordena">Sala de ordeña</option><option value="bodega">Bodega</option><option value="manga">Manga</option><option value="otro">Otro</option></select></label>
+            <label>Nombre<input id="landmark-name" maxlength="160" required></label>
+            <label>Latitud<input id="latitude" inputmode="decimal" required type="number" step="any"></label>
+            <label>Longitud<input id="longitude" inputmode="decimal" required type="number" step="any"></label>
+          </div>
+          <label style="margin-top:.8rem">Notas<textarea id="landmark-notes" maxlength="2000"></textarea></label>
+          <div class="actions"><button class="secondary" id="locate" type="button">Usar GPS actual</button><button type="submit">Guardar hito local</button></div>
+        </form>
+      </div>
+
+      <section class="privacy" style="margin-top:1rem">
+        La sesión local sólo habilita captura y selección. Al volver la señal, el servidor revalida identidad, organización, rol y fundo; una cuenta distinta no puede enviar esta partición. Las fotos esperan al dato aplicado y preservan el original privado en R2 con SHA-256.
+      </section>
+    </main>
+  </body>
+</html>

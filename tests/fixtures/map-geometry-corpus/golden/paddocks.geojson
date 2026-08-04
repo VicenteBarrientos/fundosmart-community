@@ -1,0 +1,105 @@
+{
+  "type": "FeatureCollection",
+  "name": "Fundo Sintético MAP-002",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "corpus-golden-paddock",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -73.13,
+              -40.57
+            ],
+            [
+              -73.128,
+              -40.57
+            ],
+            [
+              -73.128,
+              -40.568
+            ],
+            [
+              -73.13,
+              -40.568
+            ],
+            [
+              -73.13,
+              -40.57
+            ]
+          ],
+          [
+            [
+              -73.1297,
+              -40.5697
+            ],
+            [
+              -73.1293,
+              -40.5697
+            ],
+            [
+              -73.1293,
+              -40.5693
+            ],
+            [
+              -73.1297,
+              -40.5693
+            ],
+            [
+              -73.1297,
+              -40.5697
+            ]
+          ],
+          [
+            [
+              -73.1288,
+              -40.5688
+            ],
+            [
+              -73.1283,
+              -40.5688
+            ],
+            [
+              -73.1283,
+              -40.5683
+            ],
+            [
+              -73.1288,
+              -40.5683
+            ],
+            [
+              -73.1288,
+              -40.5688
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "corpus-golden-paddock",
+        "name": "Potrero Dorado & Humedal",
+        "sector": "Sintético Norte",
+        "areaHectares": 3.7568980787389408,
+        "areaSquareMeters": 37568.98078738941,
+        "grossAreaHectares": 3.7568980787389408,
+        "netAreaHectares": 3.37181556953615,
+        "grazeableAreaHectares": null,
+        "effectiveGrazeableAreaHectares": 3.37181556953615,
+        "landUse": "pradera_permanente",
+        "holeKinds": [
+          "laguna",
+          "bosque"
+        ],
+        "status": "Disponible",
+        "soil": {
+          "ph": 5.8,
+          "nitrogen": 18,
+          "phosphorus": 22,
+          "potassium": 190
+        },
+        "perimeterMeters": 1134.8364956882824
+      }
+    }
+  ]
+}

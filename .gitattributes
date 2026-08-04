@@ -1,0 +1,18 @@
+# Keep source and configuration files identical across Windows and Linux.
+* text=auto eol=lf
+
+# Never apply text conversion or text diffs to binary artifacts.
+*.dbf binary !eol
+*.docx binary !eol
+*.gif binary !eol
+*.ico binary !eol
+*.jpeg binary !eol
+*.jpg binary !eol
+*.pdf binary !eol
+*.png binary !eol
+*.sqlite binary !eol
+*.webp binary !eol
+*.woff binary !eol
+*.woff2 binary !eol
+*.xlsx binary !eol
+*.zip binary !eol

@@ -1,0 +1,12 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "fundosmart-community-local",
+  "compatibility_date": "2026-07-23",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "fundosmart-community-local",
+      "migrations_dir": "../../drizzle"
+    }
+  ]
+}

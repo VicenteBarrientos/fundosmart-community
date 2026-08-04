@@ -1,0 +1,21 @@
+{
+  "name": "brace-expansion",
+  "version": "5.0.9",
+  "private": true,
+  "description": "CommonJS compatibility adapter for the patched brace-expansion release.",
+  "main": "index.cjs",
+  "exports": {
+    ".": {
+      "import": "./index.cjs",
+      "require": "./index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": "20 || >=22"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "brace-expansion-safe": "npm:brace-expansion@5.0.9"
+  }
+}

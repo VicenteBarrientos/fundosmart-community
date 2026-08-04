@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Reportar una vulnerabilidad
+    url: https://github.com/VicenteBarrientos/fundosmart-community/security/advisories/new
+    about: No publiques vulnerabilidades ni datos sensibles en un issue.
+  - name: Soporte y privacidad
+    url: mailto:soporte@fundosmart.com
+    about: Consultas sobre una cuenta o información privada.

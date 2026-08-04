@@ -1,0 +1,19 @@
+# Copia este archivo como .dev.vars y reemplaza todos los valores de ejemplo.
+AUTH_ORIGIN=http://localhost:3000
+DEV_AUTH_EMAIL=developer@example.com
+DEV_AUTH_NAME=Desarrollador local
+FUNDOSMART_OWNER_EMAIL=developer@example.com
+OFFLINE_SESSION_SECRET=replace-with-at-least-32-random-characters
+ASSISTANT_CONFIRMATION_SECRET=replace-with-at-least-32-random-characters
+AI_KEYS_ENCRYPTION_SECRET=replace-with-at-least-32-random-characters
+
+# OAuth de Google es opcional para la identidad local DEV_AUTH_*.
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=
+
+# Funciones opcionales.
+# FUNDOSMART_APP_BASE_URL=http://localhost:3000
+# FUNDOSMART_EMAIL_FROM=notifications@example.com
+# FUNDOSMART_INBOX_DOMAIN=example.com
+# CDSE_CLIENT_ID=
+# CDSE_CLIENT_SECRET=

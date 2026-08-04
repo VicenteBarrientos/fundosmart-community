@@ -1,0 +1,116 @@
+<svg width="1128" height="191" viewBox="0 0 1128 191" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#040D08"/>
+      <stop offset="45%" stop-color="#0A2216"/>
+      <stop offset="85%" stop-color="#06150E"/>
+      <stop offset="100%" stop-color="#020805"/>
+    </linearGradient>
+
+    <!-- Emerald Glow Filter -->
+    <radialGradient id="emerald-glow" cx="80%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#10B981" stop-opacity="0.25"/>
+      <stop offset="50%" stop-color="#059669" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#040D08" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Glassmorphic Card Fill -->
+    <linearGradient id="glass-fill" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.07"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.02"/>
+    </linearGradient>
+
+    <!-- Border Accent Gradient -->
+    <linearGradient id="border-accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#10B981" stop-opacity="0.8"/>
+      <stop offset="50%" stop-color="#34D399" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#059669" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Base Background -->
+  <rect width="1128" height="191" fill="url(#bg-gradient)"/>
+
+  <!-- Subtle Glow Layer -->
+  <rect width="1128" height="191" fill="url(#emerald-glow)"/>
+
+  <!-- Paddock Grid & Topographic lines background graphics (Right Side) -->
+  <g opacity="0.12" stroke="#34D399" stroke-width="1.2" fill="none">
+    <!-- Paddock Polygons -->
+    <polygon points="750,20 880,10 940,70 820,95 740,50"/>
+    <polygon points="820,95 940,70 1020,130 910,165 800,120"/>
+    <polygon points="910,165 1020,130 1100,180 980,190"/>
+    <polygon points="680,80 740,50 800,120 720,160 650,110"/>
+    <!-- Dashboard Node Points -->
+    <circle cx="820" cy="95" r="4" fill="#34D399"/>
+    <circle cx="940" cy="70" r="4" fill="#34D399"/>
+    <circle cx="800" cy="120" r="4" fill="#10B981"/>
+    <circle cx="910" cy="165" r="4" fill="#34D399"/>
+  </g>
+
+  <!-- Glassmorphic Feature Badges (Right Side Cards) -->
+  <g transform="translate(730, 28)">
+    <!-- Card 1: Milk Analytics -->
+    <rect x="0" y="0" width="170" height="60" rx="10" fill="url(#glass-fill)" stroke="#34D399" stroke-opacity="0.2" stroke-width="1"/>
+    <text x="14" y="24" fill="#A7F3D0" font-size="11" font-weight="600" letter-spacing="0.5">CONTROL LECHERO</text>
+    <text x="14" y="44" fill="#FFFFFF" font-size="15" font-weight="700">98.4% <tspan fill="#34D399" font-size="11" font-weight="400">Calidad A1</tspan></text>
+
+    <!-- Card 2: Livestock 360 -->
+    <rect x="185" y="0" width="180" height="60" rx="10" fill="url(#glass-fill)" stroke="#34D399" stroke-opacity="0.2" stroke-width="1"/>
+    <text x="14" y="24" fill="#A7F3D0" font-size="11" font-weight="600" letter-spacing="0.5">TRAZABILIDAD DIIO</text>
+    <text x="14" y="44" fill="#FFFFFF" font-size="15" font-weight="700">Ficha 360° <tspan fill="#34D399" font-size="11" font-weight="400">Ganado</tspan></text>
+
+    <!-- Card 3: Paddock Satellite Analytics -->
+    <rect x="90" y="72" width="275" height="60" rx="10" fill="url(#glass-fill)" stroke="#34D399" stroke-opacity="0.3" stroke-width="1"/>
+    <text x="16" y="96" fill="#A7F3D0" font-size="11" font-weight="600" letter-spacing="0.5">PRADERAS Y POTREROS</text>
+    <text x="16" y="116" fill="#FFFFFF" font-size="14" font-weight="700">Gestión Territorial Sur de Chile</text>
+  </g>
+
+  <!-- Left Side Branding & Messaging -->
+  <g transform="translate(60, 36)">
+    <!-- FundoSmart Logo Mark Icon -->
+    <g transform="translate(0, 2)">
+      <rect width="44" height="44" rx="12" fill="#0A0A0A" stroke="#10B981" stroke-width="1.5"/>
+      <!-- Custom Smart Field Leaf Icon -->
+      <path d="M 22,10 C 14,10 12,18 12,26 C 12,32 17,34 22,34 C 27,34 32,32 32,26 C 32,18 30,10 22,10 Z" fill="none" stroke="#10B981" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M 22,14 L 22,30 M 22,20 L 27,16 M 22,24 L 17,20" stroke="#34D399" stroke-width="2" stroke-linecap="round"/>
+    </g>
+
+    <!-- Brand Name -->
+    <text x="56" y="34" fill="#FFFFFF" font-size="34" font-weight="800" letter-spacing="-1">Fundo<tspan fill="#34D399" font-weight="400">Smart</tspan></text>
+
+    <!-- Main Value Proposition Slogan -->
+    <text x="0" y="78" fill="#F8FAFC" font-size="19" font-weight="700" letter-spacing="-0.2">
+      La operación de tu fundo ganadero y lechero en una sola plataforma
+    </text>
+
+    <!-- Feature Pillars -->
+    <g transform="translate(0, 102)">
+      <!-- Pill 1 -->
+      <rect x="0" y="0" width="135" height="24" rx="12" fill="#10B981" fill-opacity="0.15" stroke="#10B981" stroke-opacity="0.4" stroke-width="1"/>
+      <text x="12" y="16" fill="#34D399" font-size="11" font-weight="600">Trazabilidad DIIO</text>
+
+      <!-- Pill 2 -->
+      <rect x="143" y="0" width="130" height="24" rx="12" fill="#10B981" fill-opacity="0.15" stroke="#10B981" stroke-opacity="0.4" stroke-width="1"/>
+      <text x="12" y="16" fill="#34D399" font-size="11" font-weight="600">Control Lechero</text>
+
+      <!-- Pill 3 -->
+      <rect x="281" y="0" width="145" height="24" rx="12" fill="#10B981" fill-opacity="0.15" stroke="#10B981" stroke-opacity="0.4" stroke-width="1"/>
+      <text x="12" y="16" fill="#34D399" font-size="11" font-weight="600">Potreros &amp; Praderas</text>
+
+      <!-- Pill 4 -->
+      <rect x="434" y="0" width="130" height="24" rx="12" fill="#10B981" fill-opacity="0.15" stroke="#10B981" stroke-opacity="0.4" stroke-width="1"/>
+      <text x="12" y="16" fill="#34D399" font-size="11" font-weight="600">Libro Financiero</text>
+    </g>
+  </g>
+
+  <!-- Call to Action Badge (Bottom Right) -->
+  <g transform="translate(940, 142)">
+    <rect x="0" y="0" width="148" height="32" rx="16" fill="#10B981"/>
+    <text x="74" y="20" fill="#040D08" font-size="13" font-weight="800" text-anchor="middle" letter-spacing="0.2">fundosmart.com</text>
+  </g>
+
+  <!-- Top Accent Bar -->
+  <rect x="0" y="0" width="1128" height="3" fill="url(#border-accent)"/>
+</svg>
