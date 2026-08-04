@@ -30,7 +30,8 @@ La [decisión de arquitectura](docs/architecture/0001-open-source-core-and-exten
 
 ## Inicio rápido
 
-Requisitos: Node.js `>=22.13.0` y npm.
+Requisitos: Node.js `>=22.13.0` y npm `10.9.3` para reproducir exactamente el
+lockfile multiplataforma.
 
 ```bash
 git clone https://github.com/VicenteBarrientos/fundosmart-community.git

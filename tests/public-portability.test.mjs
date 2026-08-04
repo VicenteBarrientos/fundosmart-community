@@ -57,6 +57,7 @@ test("public project metadata and security links target the community repository
 
   assert.equal(metadata.name, "fundosmart-community");
   assert.equal(metadata.license, "AGPL-3.0-only");
+  assert.equal(metadata.packageManager, "npm@10.9.3");
   assert.equal(metadata.repository.url, "git+https://github.com/VicenteBarrientos/fundosmart-community.git");
   assert.match(security, /fundosmart-community\/security\/advisories\/new/u);
   assert.match(issueConfig, /fundosmart-community\/security\/advisories\/new/u);

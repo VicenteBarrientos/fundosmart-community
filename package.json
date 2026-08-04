@@ -12,6 +12,7 @@
     "url": "https://github.com/VicenteBarrientos/fundosmart-community/issues"
   },
   "private": true,
+  "packageManager": "npm@10.9.3",
   "engines": {
     "node": ">=22.13.0"
   },
