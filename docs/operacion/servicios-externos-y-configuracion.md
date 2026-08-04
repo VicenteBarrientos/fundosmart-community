@@ -6,7 +6,7 @@ La demo y D1 funcionan localmente sin credenciales remotas. Al abrir mapas, el n
 
 | Servicio | Cuándo se necesita | Configuración | Datos enviados y comportamiento sin servicio |
 |---|---|---|---|
-| Cloudflare Worker, D1, R2, Images y Assets | Obligatorios para una instalación remota con la configuración actual | `CLOUDFLARE_ACCOUNT_ID`, `FUNDOSMART_WORKER_NAME`, `FUNDOSMART_D1_DATABASE_NAME`, `FUNDOSMART_D1_DATABASE_ID`, `FUNDOSMART_R2_BUCKET_NAME` | Alojan ejecución, base, archivos privados, transformaciones y estáticos. La demo local usa emulación, pero no existe fallback remoto si falta un binding. Images debe habilitarse y puede tener plan, límites y costos propios. |
+| Cloudflare Worker, D1, R2, Images y Assets | Obligatorios para una instalación remota con la configuración actual | `CLOUDFLARE_ACCOUNT_ID`, `FUNDOSMART_WORKER_NAME`, `FUNDOSMART_D1_DATABASE_NAME`, `FUNDOSMART_D1_DATABASE_ID`, `FUNDOSMART_R2_BUCKET_NAME`, `FUNDOSMART_DATA_JURISDICTION` | Alojan ejecución, base, archivos privados, transformaciones y estáticos. La demo local usa emulación, pero no existe fallback remoto si falta un binding. Images debe habilitarse y puede tener plan, límites y costos propios. |
 | Google OpenID Connect | Opcional en demo local; necesario para usuarios autenticados remotos | Secretos `AUTH_ORIGIN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. Callback exacto: `${AUTH_ORIGIN}/auth/google/callback` | Google recibe la solicitud OIDC y devuelve identidad `openid email`. Sin credenciales solo funciona la demo; `DEV_AUTH_*` está prohibido remotamente. |
 | OpenStreetMap Standard | Mapa base predeterminado | Sin clave | El navegador pide teselas a `tile.openstreetmap.org`, con IP y parámetros de tesela. Sin red, el resto del formulario sigue disponible pero el fondo queda sin teselas. Deben respetarse la atribución y política de uso del proveedor. |
 | Nominatim | No activo en el runtime actual | Ninguna | Existe un cliente reservado y pruebas, pero ningún flujo de producto lo invoca en esta versión. |
@@ -27,9 +27,10 @@ La demo y D1 funcionan localmente sin credenciales remotas. Al abrir mapas, el n
 - `FUNDOSMART_RELEASE_SHA`: SHA completo del commit construido.
 - `NEXT_PUBLIC_APP_URL`, `FUNDOSMART_APP_BASE_URL` y `FUNDOSMART_BASE_URL`: el mismo origen HTTPS con dominio propio.
 - `FUNDOSMART_WORKER_NAME`, `FUNDOSMART_D1_DATABASE_NAME`, `FUNDOSMART_D1_DATABASE_ID` y `FUNDOSMART_R2_BUCKET_NAME`: recursos pertenecientes a la instalación.
+- `FUNDOSMART_DATA_JURISDICTION`: vacío para crear D1 y R2 con un *location hint* de mejor esfuerzo, o exactamente `eu`/`fedramp` para restringir ambos recursos a esa jurisdicción. Una jurisdicción solo se fija al crear cada recurso y no puede combinarse con `--location`.
 - `FUNDOSMART_ENABLE_AI`, `FUNDOSMART_ENABLE_REMOTE_AI` y `FUNDOSMART_ENABLE_ANALYTICS`: booleanos explícitos. `FUNDOSMART_ENABLE_REMOTE_AI` debe quedar `false` en builds remotos.
 
-El archivo versionado [.env.production.example](../../.env.production.example) contiene el contrato completo de build. Usa copias ignoradas distintas, por ejemplo `.env.staging.local` y `.env.production.local`. El manifiesto remoto incorpora `account_id`, y la receta ejecuta Wrangler mediante un wrapper que reemplaza cualquier Account ID heredado por el del archivo seleccionado.
+El archivo versionado [.env.production.example](../../.env.production.example) contiene el contrato completo de build. Usa copias ignoradas distintas, por ejemplo `.env.staging.local` y `.env.production.local`. El manifiesto remoto incorpora `account_id`; el gate genera una atestación por entorno sobre el SHA y todo `dist`, y el wrapper solo admite operaciones declaradas, verifica esa atestación, aporta una copia estable del manifiesto y reemplaza cualquier Account ID heredado por el del archivo seleccionado.
 
 ## Secretos obligatorios para usuarios remotos
 

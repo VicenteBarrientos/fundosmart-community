@@ -1,22 +1,24 @@
 import assert from "node:assert/strict";
-import { readFile, rm, mkdtemp, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdir, readFile, rm, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { parseEnv } from "node:util";
+import { parseEnv, promisify } from "node:util";
 
 import { createLocalVars } from "../scripts/development/create-local-vars.mjs";
-import { createSelfHostingSecrets } from "../scripts/release/create-self-hosting-secrets.mjs";
+import { digestDistTree } from "../scripts/release/self-hosting-attestation.mjs";
 import { runSelfHostingCheck } from "../scripts/release/run-self-hosting-check.mjs";
 import { runPinnedWrangler } from "../scripts/release/run-pinned-wrangler.mjs";
-import { loadSelfHostingSmokeConfiguration } from "../scripts/release/smoke.mjs";
 import {
   SelfHostingPreflightError,
   validateBuiltWorkerConfig,
   validateSelfHostingEnvironment,
+  validateSelfHostingEnvironmentSelection,
 } from "../scripts/release/self-hosting-preflight.mjs";
 
 const releaseSha = "a".repeat(40);
+const execFileAsync = promisify(execFile);
 
 function validVariables(overrides = {}) {
   return {
@@ -29,6 +31,7 @@ function validVariables(overrides = {}) {
     FUNDOSMART_D1_DATABASE_NAME: "fundosmart-community-farm",
     FUNDOSMART_D1_DATABASE_ID: "123e4567-e89b-42d3-a456-426614174000",
     FUNDOSMART_R2_BUCKET_NAME: "fundosmart-community-farm-files",
+    FUNDOSMART_DATA_JURISDICTION: "",
     CLOUDFLARE_ACCOUNT_ID: "1234567890abcdef1234567890abcdef",
     FUNDOSMART_ENABLE_AI: "false",
     FUNDOSMART_ENABLE_REMOTE_AI: "false",
@@ -51,33 +54,96 @@ function validSecrets(overrides = {}) {
 }
 
 function validBuiltConfig(variables = validVariables()) {
+  const dataJurisdiction = variables.FUNDOSMART_DATA_JURISDICTION?.trim();
+  const analyticsEnabled = variables.FUNDOSMART_ENABLE_ANALYTICS === "true";
+  const aiEnabled = variables.FUNDOSMART_ENABLE_AI === "true";
+  const emailSender = variables.FUNDOSMART_EMAIL_FROM?.trim();
+  const inboxDomain = variables.FUNDOSMART_INBOX_DOMAIN?.trim();
   return {
-    account_id: variables.CLOUDFLARE_ACCOUNT_ID,
+    topLevelName: variables.FUNDOSMART_WORKER_NAME,
+    dev: {
+      ip: "127.0.0.1",
+      local_protocol: "http",
+      upstream_protocol: "http",
+      enable_containers: true,
+      generate_types: false,
+    },
     name: variables.FUNDOSMART_WORKER_NAME,
+    compatibility_date: "2026-07-18",
+    compatibility_flags: ["nodejs_compat"],
     vars: {
       FUNDOSMART_DEPLOY_ENVIRONMENT: variables.FUNDOSMART_DEPLOY_ENVIRONMENT,
       FUNDOSMART_RELEASE_SHA: variables.FUNDOSMART_RELEASE_SHA,
       FUNDOSMART_APP_BASE_URL: variables.FUNDOSMART_APP_BASE_URL,
+      ...(emailSender ? { FUNDOSMART_EMAIL_FROM: emailSender } : {}),
+      ...(inboxDomain ? { FUNDOSMART_INBOX_DOMAIN: inboxDomain } : {}),
     },
+    durable_objects: { bindings: [] },
+    kv_namespaces: [],
+    queues: { producers: [], consumers: [] },
+    r2_buckets: [{
+      binding: "FILES",
+      bucket_name: variables.FUNDOSMART_R2_BUCKET_NAME,
+      ...(dataJurisdiction ? { jurisdiction: dataJurisdiction } : {}),
+    }],
     d1_databases: [{
       binding: "DB",
       database_name: variables.FUNDOSMART_D1_DATABASE_NAME,
       database_id: variables.FUNDOSMART_D1_DATABASE_ID,
+      migrations_dir: "../../drizzle",
     }],
-    r2_buckets: [{ binding: "FILES", bucket_name: variables.FUNDOSMART_R2_BUCKET_NAME }],
+    vectorize: [],
+    ai_search_namespaces: [],
+    ai_search: [],
+    agent_memory: [],
+    hyperdrive: [],
+    workflows: [],
+    secrets_store_secrets: [],
+    artifacts: [],
+    services: [],
+    analytics_engine_datasets: analyticsEnabled
+      ? [
+          { binding: "METRICS", dataset: variables.FUNDOSMART_METRICS_DATASET },
+          { binding: "MAP_USAGE", dataset: variables.FUNDOSMART_MAP_USAGE_DATASET },
+        ]
+      : [],
     images: { binding: "IMAGES" },
+    ...(aiEnabled ? { ai: { binding: "AI" } } : {}),
+    unsafe_hello_world: [],
+    flagship: [],
+    ratelimits: [],
+    worker_loaders: [],
+    main: "index.js",
+    jsx_factory: "React.createElement",
+    jsx_fragment: "React.Fragment",
+    migrations: [],
+    exports: {},
+    triggers: { crons: ["17 */6 * * *"] },
+    rules: [{ type: "ESModule", globs: ["**/*.js", "**/*.mjs"] }],
+    build: { watch_dir: "./src" },
+    no_bundle: true,
+    dispatch_namespaces: [],
+    logfwdr: { bindings: [] },
     assets: { binding: "ASSETS", directory: "../client" },
+    observability: {
+      enabled: true,
+      logs: { enabled: true, head_sampling_rate: 1, invocation_logs: true },
+      traces: { enabled: true, head_sampling_rate: 0.05 },
+    },
+    python_modules: { exclude: ["**/*.pyc"] },
+    define: {},
+    cloudchamber: {},
+    send_email: emailSender
+      ? [{ name: "EMAIL", allowed_sender_addresses: [emailSender] }]
+      : [],
+    mtls_certificates: [],
+    pipelines: [],
+    vpc_services: [],
+    vpc_networks: [],
+    account_id: variables.CLOUDFLARE_ACCOUNT_ID,
     workers_dev: false,
     preview_urls: false,
     routes: [{ pattern: "community.farm.cl", custom_domain: true }],
-    observability: {
-      enabled: true,
-      logs: { enabled: true },
-      traces: { enabled: true },
-    },
-    triggers: { crons: ["17 */6 * * *"] },
-    analytics_engine_datasets: [],
-    send_email: [],
   };
 }
 
@@ -98,6 +164,100 @@ test("accepts an installation-owned production configuration and matching build"
     releaseSha,
   });
   assert.equal(validateBuiltWorkerConfig({ config: validBuiltConfig(variables), variables, secrets }), true);
+});
+
+test("binds the optional data jurisdiction exactly to the R2 binding", () => {
+  for (const jurisdiction of ["", "eu", "fedramp"]) {
+    const variables = validVariables({ FUNDOSMART_DATA_JURISDICTION: jurisdiction });
+    const config = validBuiltConfig(variables);
+    assert.equal(validateSelfHostingEnvironment({
+      variables,
+      secrets: validSecrets(),
+      expectedHeadSha: releaseSha,
+      gitStatus: "",
+      processEnvironment: {},
+    }).environment, "production");
+    assert.equal(validateBuiltWorkerConfig({ config, variables, secrets: validSecrets() }), true);
+    assert.equal(config.r2_buckets[0].jurisdiction, jurisdiction || undefined);
+  }
+
+  assert.throws(
+    () => validateSelfHostingEnvironment({
+      variables: validVariables({ FUNDOSMART_DATA_JURISDICTION: "wnam" }),
+      secrets: validSecrets(),
+      expectedHeadSha: releaseSha,
+      gitStatus: "",
+      processEnvironment: {},
+    }),
+    /DATA_JURISDICTION must be empty, eu or fedramp/u,
+  );
+
+  const defaultVariables = validVariables();
+  const unexpectedJurisdiction = validBuiltConfig(defaultVariables);
+  unexpectedJurisdiction.r2_buckets[0].jurisdiction = "eu";
+  assert.throws(
+    () => validateBuiltWorkerConfig({
+      config: unexpectedJurisdiction,
+      variables: defaultVariables,
+      secrets: validSecrets(),
+    }),
+    /installation-owned R2 bucket/u,
+  );
+
+  const euVariables = validVariables({ FUNDOSMART_DATA_JURISDICTION: "eu" });
+  const missingJurisdiction = validBuiltConfig(euVariables);
+  delete missingJurisdiction.r2_buckets[0].jurisdiction;
+  assert.throws(
+    () => validateBuiltWorkerConfig({
+      config: missingJurisdiction,
+      variables: euVariables,
+      secrets: validSecrets(),
+    }),
+    /installation-owned R2 bucket/u,
+  );
+});
+
+test("rejects every extra remote binding and capability family", () => {
+  const unexpectedCapabilities = [
+    ["KV", (config) => config.kv_namespaces.push({ binding: "KV", id: "1".repeat(32) })],
+    ["Durable Objects", (config) => config.durable_objects.bindings.push({ name: "DO", class_name: "Object" })],
+    ["Queues", (config) => config.queues.producers.push({ binding: "QUEUE", queue: "queue" })],
+    ["Vectorize", (config) => config.vectorize.push({ binding: "VECTOR", index_name: "index" })],
+    ["AI Search", (config) => config.ai_search.push({ binding: "SEARCH", index_name: "index" })],
+    ["Agent Memory", (config) => config.agent_memory.push({ binding: "MEMORY", id: "memory" })],
+    ["Hyperdrive", (config) => config.hyperdrive.push({ binding: "HYPERDRIVE", id: "1".repeat(32) })],
+    ["Workflows", (config) => config.workflows.push({ binding: "WORKFLOW", name: "workflow" })],
+    ["Secrets Store", (config) => config.secrets_store_secrets.push({ binding: "STORE", store_id: "store", secret_name: "secret" })],
+    ["Artifacts", (config) => config.artifacts.push({ binding: "ARTIFACTS" })],
+    ["Services", (config) => config.services.push({ binding: "SERVICE", service: "other-worker" })],
+    ["unsafe hello world", (config) => config.unsafe_hello_world.push({ binding: "UNSAFE" })],
+    ["Flagship", (config) => config.flagship.push({ binding: "FLAG" })],
+    ["Rate limits", (config) => config.ratelimits.push({ name: "LIMIT", namespace_id: "1" })],
+    ["Worker loaders", (config) => config.worker_loaders.push({ binding: "LOADER" })],
+    ["Dispatch namespaces", (config) => config.dispatch_namespaces.push({ binding: "DISPATCH", namespace: "namespace" })],
+    ["Logfwdr", (config) => config.logfwdr.bindings.push({ name: "LOG", destination: "log" })],
+    ["mTLS", (config) => config.mtls_certificates.push({ binding: "CERT", certificate_id: "certificate" })],
+    ["Pipelines", (config) => config.pipelines.push({ binding: "PIPELINE", pipeline: "pipeline" })],
+    ["VPC services", (config) => config.vpc_services.push({ binding: "VPC", service_id: "service" })],
+    ["VPC networks", (config) => config.vpc_networks.push({ binding: "NETWORK", network_id: "network" })],
+    ["Browser", (config) => { config.browser = { binding: "BROWSER" }; }],
+    ["Version metadata", (config) => { config.version_metadata = { binding: "VERSION" }; }],
+    ["unsafe metadata", (config) => { config.unsafe = { bindings: [{ name: "UNSAFE", type: "unsafe" }] }; }],
+    ["Tail consumers", (config) => { config.tail_consumers = [{ service: "tail" }]; }],
+    ["Streaming tail consumers", (config) => { config.streaming_tail_consumers = [{ service: "tail" }]; }],
+    ["Containers", (config) => { config.containers = [{ class_name: "Container", image: "image" }]; }],
+    ["Placement", (config) => { config.placement = { mode: "smart" }; }],
+  ];
+
+  for (const [label, mutate] of unexpectedCapabilities) {
+    const config = validBuiltConfig();
+    mutate(config);
+    assert.throws(
+      () => validateBuiltWorkerConfig({ config, variables: validVariables(), secrets: validSecrets() }),
+      /canonical remote Vite output/u,
+      label,
+    );
+  }
 });
 
 test("fails closed for development defaults, divergent origins and a stale release SHA", () => {
@@ -165,30 +325,63 @@ test("rejects reused secrets and build output wired to other resources", () => {
     () => validateBuiltWorkerConfig({ config, variables, secrets: validSecrets() }),
     /installation-owned D1 database/u,
   );
+
+  const unsafeAssets = validBuiltConfig(variables);
+  unsafeAssets.assets.run_worker_first = true;
+  assert.throws(
+    () => validateBuiltWorkerConfig({ config: unsafeAssets, variables, secrets: validSecrets() }),
+    /ASSETS binding/u,
+  );
 });
 
-test("generates three private independent secrets without printing or overwriting them", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "fundosmart-self-host-secrets-"));
-  const outputPath = path.join(directory, "community.secrets.env");
-  let call = 0;
-  const randomBytesImpl = (length) => Buffer.alloc(length, ++call);
-  try {
-    await createSelfHostingSecrets({ outputPath, randomBytesImpl });
-    const parsed = parseEnv(await readFile(outputPath, "utf8"));
-    const generated = [
-      parsed.OFFLINE_SESSION_SECRET,
-      parsed.ASSISTANT_CONFIRMATION_SECRET,
-      parsed.AI_KEYS_ENCRYPTION_SECRET,
-    ];
-    assert.equal(new Set(generated).size, 3);
-    for (const value of generated) assert.equal(Buffer.from(value, "base64url").byteLength, 32);
-    await assert.rejects(
-      () => createSelfHostingSecrets({ outputPath, randomBytesImpl }),
-      /EEXIST/u,
+test("optional Copernicus credentials are either omitted or a complete non-empty pair", () => {
+  assert.equal(validateSelfHostingEnvironment({
+    variables: validVariables(),
+    secrets: validSecrets({
+      CDSE_CLIENT_ID: "copernicus-client-issued-to-farm",
+      CDSE_CLIENT_SECRET: "copernicus-secret-issued-to-farm",
+    }),
+    expectedHeadSha: releaseSha,
+    gitStatus: "",
+    processEnvironment: {},
+  }).environment, "production");
+
+  for (const invalidPair of [
+    { CDSE_CLIENT_ID: "", CDSE_CLIENT_SECRET: "" },
+    { CDSE_CLIENT_ID: "copernicus-client-issued-to-farm", CDSE_CLIENT_SECRET: "" },
+    { CDSE_CLIENT_ID: "", CDSE_CLIENT_SECRET: "copernicus-secret-issued-to-farm" },
+    { CDSE_CLIENT_ID: "copernicus-client-issued-to-farm" },
+    { CDSE_CLIENT_SECRET: "copernicus-secret-issued-to-farm" },
+  ]) {
+    assert.throws(
+      () => validateSelfHostingEnvironment({
+        variables: validVariables(),
+        secrets: validSecrets(invalidPair),
+        expectedHeadSha: releaseSha,
+        gitStatus: "",
+        processEnvironment: {},
+      }),
+      /must both be omitted or both contain non-empty values/u,
     );
-  } finally {
-    await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("binds explicit environment selection to both operational filenames", () => {
+  assert.equal(validateSelfHostingEnvironmentSelection({
+    expectedEnvironment: "production",
+    variables: validVariables(),
+    envFile: ".env.production.local",
+    secretsFile: ".wrangler/community.production.secrets.env",
+  }), "production");
+  assert.throws(
+    () => validateSelfHostingEnvironmentSelection({
+      expectedEnvironment: "production",
+      variables: validVariables(),
+      envFile: ".env.staging.local",
+      secretsFile: ".wrangler/community.production.secrets.env",
+    }),
+    /selected production environment/u,
+  );
 });
 
 test("generates a ready local development identity with valid independent secrets", async () => {
@@ -247,91 +440,164 @@ test("rejects private or stale Worker vars and enforces the email sender restric
   );
 });
 
-test("the self-hosting gate receives build variables but never receives the secrets file", async () => {
+test("the isolated self-hosting gate receives build variables before the secrets file is read", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "fundosmart-self-host-gate-"));
-  const envFile = path.join(directory, "deployment.env");
-  const secretsFile = path.join(directory, "secrets.env");
-  const builtConfig = path.join(directory, "wrangler.json");
-  const variables = validVariables();
+  const envFile = path.join(directory, ".env.production.local");
+  const secretsFile = path.join(directory, ".wrangler", "community.production.secrets.env");
+  const builtConfig = path.join(directory, "dist", "server", "wrangler.json");
   const secrets = validSecrets();
   try {
     await Promise.all([
-      writeFile(envFile, toDotEnv(variables)),
-      writeFile(secretsFile, toDotEnv(secrets)),
-      writeFile(builtConfig, JSON.stringify(validBuiltConfig(variables))),
+      mkdir(path.dirname(secretsFile), { recursive: true }),
+      mkdir(path.dirname(builtConfig), { recursive: true }),
+      mkdir(path.join(directory, "dist", "client"), { recursive: true }),
+      mkdir(path.join(directory, "drizzle"), { recursive: true }),
     ]);
-    let gateEnvironment;
+    await writeFile(
+      path.join(directory, "drizzle", "0000_test.sql"),
+      "CREATE TABLE test (id INTEGER PRIMARY KEY);\n",
+    );
+    const fixtureReleaseSha = await initializeGitFixture(directory);
+    const variables = validVariables({ FUNDOSMART_RELEASE_SHA: fixtureReleaseSha });
+    await Promise.all([
+      writeFile(envFile, toDotEnv(variables)),
+      writeFile(secretsFile, "not dotenv yet\n"),
+      writeFile(builtConfig, JSON.stringify(validBuiltConfig(variables))),
+      writeFile(path.join(directory, "dist", "server", "index.js"), "export default {};\n"),
+      writeFile(path.join(directory, "dist", "client", "asset.txt"), "asset\n"),
+    ]);
+    let gateInvocation;
+    const isolatedWorkspace = async () => ({ rootPath: directory, workspacePath: directory });
+    const removeIsolatedWorkspace = async () => true;
+    const publishFixtureDist = async () => ({
+      distPath: path.join(directory, "dist"),
+      ...await digestDistTree({ distPath: path.join(directory, "dist") }),
+    });
     assert.equal(await runSelfHostingCheck({
       cwd: directory,
+      expectedEnvironment: "production",
       envFile,
       secretsFile,
-      builtConfig,
-      expectedHeadSha: releaseSha,
+      expectedHeadSha: fixtureReleaseSha,
       gitStatus: "",
       hostEnvironment: {
         Path: process.env.Path ?? process.env.PATH,
         NODE_OPTIONS: "--import=data:text/javascript,process.exit(0)",
         google_client_secret: "must-not-reach-the-gate",
       },
-      runGate: async ({ environment }) => {
-        gateEnvironment = environment;
+      createGateWorkspace: isolatedWorkspace,
+      removeGateWorkspace: removeIsolatedWorkspace,
+      publishDist: publishFixtureDist,
+      runGate: async (invocation) => {
+        gateInvocation = invocation;
+        await writeFile(secretsFile, toDotEnv(secrets));
       },
     }), true);
-    assert.equal(gateEnvironment.FUNDOSMART_D1_DATABASE_ID, variables.FUNDOSMART_D1_DATABASE_ID);
-    assert.equal(gateEnvironment.GOOGLE_CLIENT_SECRET, undefined);
-    assert.equal(gateEnvironment.OFFLINE_SESSION_SECRET, undefined);
-    assert.equal(gateEnvironment.google_client_secret, undefined);
-    assert.equal(gateEnvironment.NODE_OPTIONS, undefined);
-    assert.equal(gateEnvironment.CI, "true");
+    assert.equal(gateInvocation.cwd, directory);
+    assert.equal(gateInvocation.variables.FUNDOSMART_D1_DATABASE_ID, variables.FUNDOSMART_D1_DATABASE_ID);
+    assert.equal(gateInvocation.variables.GOOGLE_CLIENT_SECRET, undefined);
+    assert.equal(gateInvocation.variables.OFFLINE_SESSION_SECRET, undefined);
+    await assert.rejects(
+      runSelfHostingCheck({
+        cwd: directory,
+        expectedEnvironment: "production",
+        envFile,
+        secretsFile,
+        expectedHeadSha: fixtureReleaseSha,
+        gitStatus: "",
+        hostEnvironment: {},
+        createGateWorkspace: isolatedWorkspace,
+        removeGateWorkspace: removeIsolatedWorkspace,
+        publishDist: publishFixtureDist,
+        runGate: async () => writeFile(envFile, `${toDotEnv(variables)}# changed during gate\n`),
+      }),
+      /environment(?: or secrets)? file changed/u,
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
 });
 
-test("pins Wrangler to the selected account and selected environment file", async () => {
+test("pins bootstrap Wrangler to the selected account and sanitized environment", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "fundosmart-pinned-wrangler-"));
   const envFile = path.join(directory, ".env.staging.local");
   const variables = validVariables({ FUNDOSMART_DEPLOY_ENVIRONMENT: "staging" });
   try {
     await writeFile(envFile, toDotEnv(variables));
     let invocation;
+    const activeTooling = new WeakSet();
     await runPinnedWrangler({
       cwd: directory,
+      expectedEnvironment: "staging",
       envFile,
-      wranglerArguments: ["d1", "info", "DB"],
+      wranglerArguments: ["whoami"],
       hostEnvironment: {
         CLOUDFLARE_ACCOUNT_ID: "f".repeat(32),
+        CLOUDFLARE_API_BASE_URL: "https://attacker.invalid/client/v4",
+        CLOUDFLARE_API_TOKEN: "authentication-token-is-preserved",
         Node_Options: "--import=malicious.mjs",
-        CF_API_TOKEN: "authentication-token-is-preserved",
       },
       expectedHeadSha: releaseSha,
       gitStatus: "",
+      installTooling: async ({ cwd, releaseSha: toolingReleaseSha }) => {
+        const rootPath = await mkdtemp(path.join(tmpdir(), "fundosmart-preflight-tooling-"));
+        const workspacePath = path.join(rootPath, "checkout");
+        const runtimeRootPath = path.join(rootPath, "runtime");
+        const tempPath = path.join(runtimeRootPath, "temp");
+        await Promise.all([
+          mkdir(workspacePath, { recursive: true }),
+          mkdir(tempPath, { recursive: true }),
+        ]);
+        const tooling = Object.freeze({
+          workspace: Object.freeze({
+            rootPath,
+            workspacePath,
+            repositoryPath: cwd,
+            releaseSha: toolingReleaseSha,
+          }),
+          runtime: Object.freeze({ rootPath: runtimeRootPath, tempPath }),
+          nodeExecutable: process.execPath,
+          wranglerCli: path.join(workspacePath, "pinned-wrangler.mjs"),
+          releaseSha: toolingReleaseSha,
+        });
+        activeTooling.add(tooling);
+        return tooling;
+      },
+      removeTooling: async (tooling) => {
+        assert.equal(activeTooling.has(tooling), true);
+        await rm(tooling.workspace.rootPath, { recursive: true, force: true });
+        activeTooling.delete(tooling);
+      },
+      createToolingEnvironment: async ({ tooling, hostEnvironment, accountId }) => {
+        assert.equal(activeTooling.has(tooling), true);
+        return Object.freeze({
+          PATH: hostEnvironment.PATH ?? hostEnvironment.Path ?? "",
+          CI: "true",
+          HOME: tooling.runtime.rootPath,
+          TEMP: tooling.runtime.tempPath,
+          TMP: tooling.runtime.tempPath,
+          CLOUDFLARE_ACCOUNT_ID: accountId,
+          CLOUDFLARE_API_TOKEN: hostEnvironment.CLOUDFLARE_API_TOKEN,
+          WRANGLER_LOG_SANITIZE: "true",
+        });
+      },
+      verifyTooling: async (tooling) => {
+        assert.equal(activeTooling.has(tooling), true);
+        return true;
+      },
       runWrangler: async (details) => {
         invocation = details;
       },
     });
     assert.equal(invocation.environment.CLOUDFLARE_ACCOUNT_ID, variables.CLOUDFLARE_ACCOUNT_ID);
     assert.equal(invocation.environment.CI, "true");
-    assert.equal(invocation.environment.Node_Options, undefined);
-    assert.equal(invocation.environment.CF_API_TOKEN, "authentication-token-is-preserved");
-    assert.deepEqual(invocation.argumentsList.slice(-2), ["--env-file", envFile]);
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-});
-
-test("loads the smoke target only from the selected file", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "fundosmart-smoke-target-"));
-  const envFile = path.join(directory, ".env.staging.local");
-  try {
-    await writeFile(envFile, toDotEnv(validVariables({
-      FUNDOSMART_DEPLOY_ENVIRONMENT: "staging",
-      FUNDOSMART_SMOKE_ATTEMPTS: "3",
-    })));
-    assert.deepEqual(await loadSelfHostingSmokeConfiguration({ envFile }), {
-      baseUrl: "https://community.farm.cl",
-      attempts: 3,
-    });
+    assert.equal(invocation.environment.NODE_OPTIONS, undefined);
+    assert.equal(invocation.environment.CLOUDFLARE_API_BASE_URL, undefined);
+    assert.equal(invocation.environment.CLOUDFLARE_API_TOKEN, "authentication-token-is-preserved");
+    assert.equal(invocation.environment.WRANGLER_LOG_SANITIZE, "true");
+    assert.equal(invocation.argumentsList.at(-2), "--env-file");
+    assert.equal(path.basename(invocation.argumentsList.at(-1)), "deployment.env");
+    assert.notEqual(invocation.argumentsList.at(-1), envFile);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -352,8 +618,10 @@ test("the public documentation exposes the guarded Cloudflare lifecycle and exte
     "npm run self-host:validate",
     "npm run self-host:check",
     "npm run self-host:wrangler",
+    "--environment staging",
     "d1 migrations apply DB --remote",
-    "deploy -c dist/server/wrangler.json",
+    "deploy --strict",
+    ".wrangler/self-hosting/staging.attestation.json",
     "npm run self-host:smoke",
     "rollback PREVIOUS_VERSION_ID",
     "d1 time-travel restore DB",
@@ -370,4 +638,23 @@ test("the public documentation exposes the guarded Cloudflare lifecycle and exte
 
 function toDotEnv(values) {
   return `${Object.entries(values).map(([key, value]) => `${key}=${value}`).join("\n")}\n`;
+}
+
+async function initializeGitFixture(cwd) {
+  await runGit(cwd, ["init", "--quiet"]);
+  await runGit(cwd, ["config", "user.name", "FundoSmart tests"]);
+  await runGit(cwd, ["config", "user.email", "tests@fundosmart.invalid"]);
+  await runGit(cwd, ["config", "commit.gpgsign", "false"]);
+  await runGit(cwd, ["add", "--", "drizzle/0000_test.sql"]);
+  await runGit(cwd, ["commit", "--quiet", "-m", "fixture"]);
+  return (await runGit(cwd, ["rev-parse", "HEAD"])).trim();
+}
+
+async function runGit(cwd, argumentsList) {
+  const { stdout } = await execFileAsync("git", argumentsList, {
+    cwd,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  return stdout;
 }

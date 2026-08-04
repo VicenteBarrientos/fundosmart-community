@@ -13,7 +13,7 @@ function environmentLabel(env) {
 
 function releaseLabel(env) {
   const value = String(env?.FUNDOSMART_RELEASE_SHA ?? "").toLowerCase();
-  return /^[a-f0-9]{7,64}$/.test(value) ? value.slice(0, 12) : "unknown";
+  return /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value) ? value : "unknown";
 }
 
 function methodLabel(method) {
@@ -210,7 +210,11 @@ export async function healthResponse(env, { logger = console } = {}) {
     const result = await env.DB.prepare("SELECT 1 AS ok").first();
     if (result?.ok !== 1) throw new Error("Unexpected health result");
     return Response.json(
-      { status: "ok" },
+      {
+        status: "ok",
+        environment: environmentLabel(env),
+        release: releaseLabel(env),
+      },
       { headers: { "Cache-Control": "private, no-store" } },
     );
   } catch (cause) {

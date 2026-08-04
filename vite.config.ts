@@ -1,13 +1,19 @@
 import vinext from "vinext";
 import { defineConfig } from "vite";
 
+const DATA_JURISDICTIONS = new Set(["eu", "fedramp"]);
 const d1DatabaseId = process.env.FUNDOSMART_D1_DATABASE_ID?.trim();
+const dataJurisdiction = process.env.FUNDOSMART_DATA_JURISDICTION?.trim();
 const emailSender = process.env.FUNDOSMART_EMAIL_FROM?.trim();
 const inboxDomain = process.env.FUNDOSMART_INBOX_DOMAIN?.trim();
 const enableAnalytics = process.env.FUNDOSMART_ENABLE_ANALYTICS === "true";
 const deploymentEnvironment = process.env.FUNDOSMART_DEPLOY_ENVIRONMENT?.trim();
 const deploymentAppBaseUrl = process.env.FUNDOSMART_APP_BASE_URL?.trim();
 const deploymentAccountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim();
+
+if (dataJurisdiction && !DATA_JURISDICTIONS.has(dataJurisdiction)) {
+  throw new Error("FUNDOSMART_DATA_JURISDICTION must be empty, eu or fedramp.");
+}
 
 const workerVars = {
   FUNDOSMART_DEPLOY_ENVIRONMENT:
@@ -50,6 +56,7 @@ const localBindingConfig = {
       binding: "FILES",
       bucket_name:
         process.env.FUNDOSMART_R2_BUCKET_NAME?.trim() || "fundosmart-community-files",
+      ...(dataJurisdiction ? { jurisdiction: dataJurisdiction } : {}),
     },
   ],
   ...(emailSender
