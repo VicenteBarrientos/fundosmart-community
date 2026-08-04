@@ -3,7 +3,11 @@ import { defineConfig } from "vite";
 
 const d1DatabaseId = process.env.FUNDOSMART_D1_DATABASE_ID?.trim();
 const emailSender = process.env.FUNDOSMART_EMAIL_FROM?.trim();
+const inboxDomain = process.env.FUNDOSMART_INBOX_DOMAIN?.trim();
 const enableAnalytics = process.env.FUNDOSMART_ENABLE_ANALYTICS === "true";
+const deploymentEnvironment = process.env.FUNDOSMART_DEPLOY_ENVIRONMENT?.trim();
+const deploymentAppBaseUrl = process.env.FUNDOSMART_APP_BASE_URL?.trim();
+const deploymentAccountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim();
 
 const workerVars = {
   FUNDOSMART_DEPLOY_ENVIRONMENT:
@@ -14,6 +18,7 @@ const workerVars = {
     ? { FUNDOSMART_APP_BASE_URL: process.env.FUNDOSMART_APP_BASE_URL.trim() }
     : {}),
   ...(emailSender ? { FUNDOSMART_EMAIL_FROM: emailSender } : {}),
+  ...(inboxDomain ? { FUNDOSMART_INBOX_DOMAIN: inboxDomain } : {}),
 };
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
@@ -90,6 +95,7 @@ const localBindingConfig = {
   triggers: {
     crons: ["17 */6 * * *"],
   },
+  ...deploymentRoutingConfig(),
 };
 
 export default defineConfig(async ({ command }) => {
@@ -129,4 +135,17 @@ function aiBindingConfig(command: "build" | "serve") {
   return process.env.FUNDOSMART_ENABLE_REMOTE_AI === "true"
     ? { ai: { binding: "AI", remote: true } }
     : { ai: { binding: "AI" } };
+}
+
+function deploymentRoutingConfig() {
+  if (!new Set(["staging", "production"]).has(deploymentEnvironment ?? "")) return {};
+  if (!deploymentAppBaseUrl) throw new Error("FUNDOSMART_APP_BASE_URL is required for a remote build.");
+  if (!deploymentAccountId) throw new Error("CLOUDFLARE_ACCOUNT_ID is required for a remote build.");
+  const url = new URL(deploymentAppBaseUrl);
+  return {
+    account_id: deploymentAccountId,
+    workers_dev: false,
+    preview_urls: false,
+    routes: [{ pattern: url.hostname, custom_domain: true }],
+  };
 }

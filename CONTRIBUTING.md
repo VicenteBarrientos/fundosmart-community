@@ -12,12 +12,15 @@ No uses GitHub Issues para vulnerabilidades ni incidentes con datos. Sigue [SECU
 
 ## Desarrollo
 
-Requisitos: Node.js `>=22.13.0` y npm compatible con el lockfile.
+Requisitos: Node.js `>=22.13.0` y npm `10.9.3`, la versión fijada por el lockfile.
 
 ```bash
 npm ci
+npm run dev:init
 npm run dev
 ```
+
+`dev:init` genera secretos locales válidos sin imprimirlos y no sobrescribe `.dev.vars`. Nunca reutilices un secreto de staging o producción. Las conexiones externas están inventariadas en [Servicios externos y configuración](docs/operacion/servicios-externos-y-configuracion.md).
 
 La aplicación local usa D1 emulada y datos de demostración. Nunca conectes las pruebas a una base, bucket, identidad o dominio de FundoSmart Cloud.
 

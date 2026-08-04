@@ -19,8 +19,8 @@ import { SESSION_COOKIE_NAMES, sha256Hex } from "./auth-core.mjs";
 /**
  * La identidad del propietario de la plataforma es configuración del Worker, no
  * código: `FUNDOSMART_OWNER_EMAIL` es un secreto obligatorio y el preflight de
- * `scripts/release/deploy.mjs` aborta el release si falta. Sin valor no hay
- * propietario legado y la autorización cae en la capa de staff v2.
+ * `scripts/release/self-hosting-preflight.mjs` aborta el release si falta. Sin
+ * valor no hay propietario legado y la autorización cae en la capa de staff v2.
  */
 function configuredOwnerEmail(environment: StaffAccessEnvironment): string {
   return normalizeAccessEmail(environment.FUNDOSMART_OWNER_EMAIL);
