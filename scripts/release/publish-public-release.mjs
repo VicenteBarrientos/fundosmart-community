@@ -116,6 +116,13 @@ export function validateTagProtectionRulesets(rulesets) {
     const bypassActors = ruleset.bypass_actors;
     const updateRules = Array.isArray(rules) ? rules.filter((rule) => rule?.type === "update") : [];
     const deletionRules = Array.isArray(rules) ? rules.filter((rule) => rule?.type === "deletion") : [];
+    const updateParameters = updateRules[0]?.parameters;
+    const updateParametersAreSafe = updateParameters === undefined
+      || (updateParameters !== null
+        && typeof updateParameters === "object"
+        && !Array.isArray(updateParameters)
+        && Object.keys(updateParameters).length === 1
+        && updateParameters.update_allows_fetch_and_merge === false);
     return Array.isArray(includes)
       && includes.length === 1
       && includes[0] === "refs/tags/v*"
@@ -125,7 +132,7 @@ export function validateTagProtectionRulesets(rulesets) {
       && bypassActors.length === 0
       && rules.length === 2
       && updateRules.length === 1
-      && updateRules[0]?.parameters?.update_allows_fetch_and_merge === false
+      && updateParametersAreSafe
       && deletionRules.length === 1;
   });
   if (!protectsEveryTag) {
