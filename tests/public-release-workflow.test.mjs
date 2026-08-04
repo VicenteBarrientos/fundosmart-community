@@ -33,6 +33,14 @@ import {
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const releaseSha = "a".repeat(40);
+const legacyTagObjectBytes = Buffer.from(
+  "b2JqZWN0IDkzOWM0MDBlNTZmZDdjYTY4Mzg3ODRmZTdkNGNhN2Q5MzlmOTYyNjIKdHlwZSBjb21taXQKdGFnIHYwLjEuMAp0YWdnZXIgVmljZW50ZSBCYXJyaWVudG9zIDwxNzU3NTMxNDUrVmljZW50ZUJhcnJpZW50b3NAdXNlcnMubm9yZXBseS5naXRodWIuY29tPiAxNzg1ODQzMTY1IC0wNDAwCgpGdW5kb1NtYXJ0IENvbW11bml0eSB2MC4xLjAK",
+  "base64",
+);
+const legacyCommitObjectBytes = Buffer.from(
+  "dHJlZSAxNzdkNmExYmI2M2UyNzI5NWFmOTU0ZDgwMTc4NGQ4YTU3ZDhmNGQxCnBhcmVudCAxM2E4MTA3M2UwZDAxYjZkYjFlYmViMmZjMTk3ZTI1NDc0Njk1NGVmCmF1dGhvciBWaWNlbnRlIEJhcnJpZW50b3MgPDE3NTc1MzE0NStWaWNlbnRlQmFycmllbnRvc0B1c2Vycy5ub3JlcGx5LmdpdGh1Yi5jb20+IDE3ODU4MzA3ODQgLTA0MDAKY29tbWl0dGVyIFZpY2VudGUgQmFycmllbnRvcyA8MTc1NzUzMTQ1K1ZpY2VudGVCYXJyaWVudG9zQHVzZXJzLm5vcmVwbHkuZ2l0aHViLmNvbT4gMTc4NTgzMDc4NCAtMDQwMAoKZml4OiBtYWtlIGxvY2tlZCBpbnN0YWxsIHBvcnRhYmxlCgpSZWdlbmVyYXRlIHRoZSBkZXBlbmRlbmN5IGxvY2sgYW5kIFNCT00gd2l0aCBucG0gMTAuOS4zIHNvIE5vZGUgMjIgcnVubmVycyByZXNvbHZlIHJlcXVpcmVkIFdBU00gZGVwZW5kZW5jaWVzIGNvbnNpc3RlbnRseSBhY3Jvc3MgcGxhdGZvcm1zLgoKU2lnbmVkLW9mZi1ieTogVmljZW50ZSBCYXJyaWVudG9zIDwxNzU3NTMxNDUrVmljZW50ZUJhcnJpZW50b3NAdXNlcnMubm9yZXBseS5naXRodWIuY29tPgo=",
+  "base64",
+);
 
 function validIdentity(overrides = {}) {
   return validateWorkflowIdentity({
@@ -234,7 +242,8 @@ test("source archives are byte-identical for the same exact Git commit", async (
 test("prepare CLI writes the exact protected workflow outputs", async (t) => {
   const fixture = await mkdtemp(path.join(os.tmpdir(), "fundosmart-release-cli-"));
   t.after(() => rm(fixture, { recursive: true, force: true }));
-  runGit(path.dirname(fixture), ["clone", "--quiet", "--no-hardlinks", root, fixture]);
+  runGit(path.dirname(fixture), ["clone", "--quiet", "--no-local", "--depth=1", "--no-tags", root, fixture]);
+  installLegacyGitObjects(fixture);
 
   const [packageMetadata, lock, sbom] = await Promise.all([
     readJson(path.join(fixture, "package.json")),
@@ -564,10 +573,20 @@ async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
 }
 
-function runGit(cwd, args) {
+function installLegacyGitObjects(cwd) {
+  const expected = PUBLIC_RELEASE_CONTRACT.legacy;
+  const commitSha = runGit(cwd, ["hash-object", "-t", "commit", "-w", "--stdin"], legacyCommitObjectBytes).trim();
+  const tagSha = runGit(cwd, ["hash-object", "-t", "tag", "-w", "--stdin"], legacyTagObjectBytes).trim();
+  assert.equal(commitSha, expected.commitSha);
+  assert.equal(tagSha, expected.tagObjectSha);
+  runGit(cwd, ["update-ref", `refs/tags/${expected.tag}`, tagSha]);
+}
+
+function runGit(cwd, args, input) {
   return execFileSync("git", args, {
     cwd,
     encoding: "utf8",
+    input,
     windowsHide: true,
     env: {
       ...process.env,
