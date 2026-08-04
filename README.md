@@ -37,14 +37,8 @@ lockfile multiplataforma.
 git clone https://github.com/VicenteBarrientos/fundosmart-community.git
 cd fundosmart-community
 npm ci
-cp .dev.vars.example .dev.vars
+npm run dev:init
 npm run dev
-```
-
-En PowerShell, reemplaza `cp` por:
-
-```powershell
-Copy-Item .dev.vars.example .dev.vars
 ```
 
 Abre `http://localhost:3000/demo` para recorrer la demo o `http://localhost:3000/app` para usar la identidad local configurada en `.dev.vars`.
@@ -59,7 +53,7 @@ No se conecta a ninguna base remota. La semilla no contiene datos de clientes, c
 
 ## Configuración
 
-Los valores no secretos están documentados en [.env.example](.env.example); los secretos y la identidad local, en [.dev.vars.example](.dev.vars.example). Ambos archivos reales están ignorados por Git.
+Los valores locales no secretos están documentados en [.env.example](.env.example); los secretos y la identidad local, en [.dev.vars.example](.dev.vars.example). Para un build remoto usa [.env.production.example](.env.production.example) y el generador de secretos. Todos los archivos reales están ignorados por Git.
 
 Para desarrollo local bastan:
 
@@ -70,9 +64,9 @@ DEV_AUTH_NAME=Desarrollador local
 FUNDOSMART_OWNER_EMAIL=developer@example.com
 ```
 
-Para un entorno remoto debes usar recursos y credenciales propios. `AUTH_ORIGIN` es obligatorio en producción y debe ser un origen HTTPS sin ruta, query ni fragmento. AI remoto, correo y telemetría están desactivados por omisión.
+Para un entorno remoto debes usar recursos, dominio y credenciales propios. `AUTH_ORIGIN` es obligatorio y debe coincidir con el origen HTTPS del build. Las identidades `DEV_AUTH_*` están prohibidas. AI, correo y Analytics Engine están desactivados por omisión; Workers Observability permanece activo según el manifiesto.
 
-Consulta la [guía de autoalojamiento](docs/operacion/autoalojamiento.md) para la topología y variables completas. El repositorio no contiene un workflow de despliegue automático: cada operador debe revisar y aprobar su propia cadena de publicación.
+Consulta la [guía ejecutable de autoalojamiento](docs/operacion/autoalojamiento.md) para crear D1/R2, validar el artefacto, migrar, desplegar, ejecutar smoke y volver atrás. La [matriz de servicios externos](docs/operacion/servicios-externos-y-configuracion.md) documenta bindings, salida de datos y fallbacks. El repositorio no contiene credenciales ni un workflow que despliegue automáticamente: cada operador debe revisar y aprobar su propia publicación.
 
 ## Calidad
 
@@ -90,7 +84,7 @@ npm run deploy:check
 npm audit
 ```
 
-`npm run deploy:check` usa `wrangler deploy --dry-run`; no publica ni modifica recursos. `npm run deploy` está bloqueado intencionalmente.
+`npm run deploy:check` usa `wrangler deploy --dry-run`; no publica ni modifica recursos. `npm run deploy` está bloqueado intencionalmente. Los comandos `self-host:*` validan una instalación concreta sin reutilizar la configuración de FundoSmart Cloud.
 
 ## Base de datos y demo
 

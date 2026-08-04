@@ -1,8 +1,11 @@
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { parseEnv } from "node:util";
 
 const DEFAULT_ATTEMPTS = 10;
 const DEFAULT_TIMEOUT_MS = 15_000;
+const DEFAULT_ENV_FILE = ".env.production.local";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -148,10 +151,32 @@ export async function smokeRelease({
   );
 }
 
+export async function loadSelfHostingSmokeConfiguration({ envFile = DEFAULT_ENV_FILE } = {}) {
+  const variables = parseEnv(await readFile(resolve(envFile), "utf8"));
+  const origins = [
+    variables.NEXT_PUBLIC_APP_URL,
+    variables.FUNDOSMART_APP_BASE_URL,
+    variables.FUNDOSMART_BASE_URL,
+  ].map((value) => String(value ?? "").trim());
+  if (origins.some((value) => !value) || new Set(origins).size !== 1) {
+    throw new Error("The smoke target must match every deployment origin in the selected environment file.");
+  }
+  const attempts = Number.parseInt(variables.FUNDOSMART_SMOKE_ATTEMPTS ?? String(DEFAULT_ATTEMPTS), 10);
+  return { baseUrl: origins[0], attempts };
+}
+
+function parseArguments(args) {
+  if (args.length === 0) return { envFile: DEFAULT_ENV_FILE };
+  if (args.length === 2 && args[0] === "--env-file" && args[1]) return { envFile: args[1] };
+  throw new Error("Usage: node scripts/release/smoke.mjs [--env-file <path>]");
+}
+
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
-  const attempts = Number.parseInt(process.env.FUNDOSMART_SMOKE_ATTEMPTS ?? String(DEFAULT_ATTEMPTS), 10);
-  smokeRelease({ baseUrl: process.env.FUNDOSMART_BASE_URL, attempts }).catch((error) => {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-    process.exitCode = 1;
-  });
+  Promise.resolve()
+    .then(() => loadSelfHostingSmokeConfiguration(parseArguments(process.argv.slice(2))))
+    .then((configuration) => smokeRelease(configuration))
+    .catch((error) => {
+      process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+      process.exitCode = 1;
+    });
 }

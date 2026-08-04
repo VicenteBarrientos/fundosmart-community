@@ -31,13 +31,15 @@ test("the community snapshot excludes private operations and customer fixtures",
 });
 
 test("the default Worker configuration is local and installation-owned", async () => {
-  const [vite, localD1, envExample, deployBlock] = await Promise.all([
+  const [vite, localD1, envExample, productionExample, deployBlock, preflight] = await Promise.all([
     readFile(path.join(root, "vite.config.ts"), "utf8"),
     readFile(path.join(root, "scripts/development/wrangler.local-d1.jsonc"), "utf8"),
     readFile(path.join(root, ".env.example"), "utf8"),
+    readFile(path.join(root, ".env.production.example"), "utf8"),
     readFile(path.join(root, "scripts/release/direct-deploy-blocked.mjs"), "utf8"),
+    readFile(path.join(root, "scripts/release/self-hosting-preflight.mjs"), "utf8"),
   ]);
-  const configuration = `${vite}\n${localD1}\n${envExample}`;
+  const configuration = `${vite}\n${localD1}\n${envExample}\n${productionExample}`;
 
   assert.match(configuration, /fundosmart-community/u);
   assert.doesNotMatch(configuration, /fundosmart-production|prod-fundosmart/iu);
@@ -45,6 +47,9 @@ test("the default Worker configuration is local and installation-owned", async (
   assert.match(vite, /FUNDOSMART_ENABLE_REMOTE_AI === "true"/u);
   assert.match(vite, /FUNDOSMART_DEPLOY_ENVIRONMENT[\s\S]*\|\| "development"/u);
   assert.match(deployBlock, /Direct deployment is disabled in the community repository/u);
+  assert.match(preflight, /DEV_AUTH_EMAIL/u);
+  assert.match(preflight, /ASSISTANT_CONFIRMATION_SECRET must be canonical Base64URL/u);
+  assert.match(preflight, /workers\.dev and preview URLs/u);
 });
 
 test("public project metadata and security links target the community repository", async () => {

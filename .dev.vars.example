@@ -3,8 +3,10 @@ AUTH_ORIGIN=http://localhost:3000
 DEV_AUTH_EMAIL=developer@example.com
 DEV_AUTH_NAME=Desarrollador local
 FUNDOSMART_OWNER_EMAIL=developer@example.com
-OFFLINE_SESSION_SECRET=replace-with-at-least-32-random-characters
-ASSISTANT_CONFIRMATION_SECRET=replace-with-at-least-32-random-characters
+# Reemplaza los tres valores. La confirmación exige 32 bytes aleatorios en
+# Base64URL; no basta con un texto de 32 caracteres.
+OFFLINE_SESSION_SECRET=replace-with-at-least-32-random-bytes
+ASSISTANT_CONFIRMATION_SECRET=replace-with-base64url-of-exactly-32-random-bytes
 AI_KEYS_ENCRYPTION_SECRET=replace-with-at-least-32-random-characters
 
 # OAuth de Google es opcional para la identidad local DEV_AUTH_*.
