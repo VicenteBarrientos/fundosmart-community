@@ -264,6 +264,7 @@ test("prepare CLI writes the exact protected workflow outputs", async (t) => {
     "user.email=release@example.invalid",
     "commit",
     "--quiet",
+    "--allow-empty",
     "-m",
     "Prepare CLI fixture",
   ]);
