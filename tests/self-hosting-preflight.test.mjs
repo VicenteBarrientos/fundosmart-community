@@ -628,6 +628,12 @@ test("the public documentation exposes the guarded Cloudflare lifecycle and exte
   ]) {
     assert.match(guide, new RegExp(command.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"));
   }
+  assert.match(guide, /CLOUDFLARE_API_TOKEN/u);
+  assert.match(guide, /Edit Cloudflare Workers[\s\S]+`D1: Edit`/u);
+  assert.match(guide, /api\/reference\/permissions/u);
+  assert.match(guide, /no lee el perfil OAuth/u);
+  assert.match(guide, /Remove-Item Env:CLOUDFLARE_API_TOKEN[\s\S]+unset CLOUDFLARE_API_TOKEN/u);
+  assert.doesNotMatch(guide, /npx wrangler login/u);
   assert.match(guide, /`npm run deploy` continúa bloqueado/u);
   assert.match(services, /OpenStreetMap Standard[\s\S]+Workers Observability[\s\S]+Copernicus/u);
   assert.match(services, /\$\{AUTH_ORIGIN\}\/auth\/google\/callback/u);

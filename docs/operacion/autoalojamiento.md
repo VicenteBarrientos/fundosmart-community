@@ -42,11 +42,32 @@ git checkout TAG_OR_FULL_SHA
 git status --short
 node --version
 npm ci
-npx wrangler login
-npx wrangler whoami
 ```
 
 `git status --short` debe quedar vacío. Los archivos operativos de esta guía están ignorados y no ensucian el checkout. El preflight aborta si no puede resolver `HEAD`, si el SHA declarado difiere o si el índice, el worktree o archivos no ignorados tienen cambios.
+
+Crea un API token acotado en Cloudflare. Como punto de partida usa la plantilla oficial [`Edit Cloudflare Workers`](https://developers.cloudflare.com/fundamentals/api/reference/template/), agrega el permiso de cuenta `D1: Edit` y restringe `Account Resources` a la cuenta que declararás en `CLOUDFLARE_ACCOUNT_ID` y `Zone Resources` al dominio de esta instalación. La receta necesita escritura sobre Workers Scripts/Routes, R2 y D1, además de los permisos de lectura de identidad y cuenta incluidos por la plantilla; contrasta siempre la selección con el [catálogo oficial de permisos](https://developers.cloudflare.com/fundamentals/api/reference/permissions/). No uses un token sin restricciones ni la Global API Key.
+
+El wrapper ejecuta Wrangler con HOME y directorios de configuración privados y nuevos en cada invocación. Por diseño no lee el perfil OAuth creado por `wrangler login` y tampoco admite `--profile`: la vía soportada es entregar `CLOUDFLARE_API_TOKEN` desde el entorno del proceso. Cárgalo mediante una entrada oculta para que el valor no quede en el historial.
+
+PowerShell:
+
+```powershell
+$cloudflareToken = Read-Host "Cloudflare API token" -AsSecureString
+$env:CLOUDFLARE_API_TOKEN = [System.Net.NetworkCredential]::new("", $cloudflareToken).Password
+$cloudflareToken.Dispose()
+Remove-Variable cloudflareToken
+```
+
+Bash:
+
+```bash
+read -rsp "Cloudflare API token: " CLOUDFLARE_API_TOKEN
+printf '\n'
+export CLOUDFLARE_API_TOKEN
+```
+
+No guardes el token en `.env.staging.local`, `.env.production.local`, `.wrangler/*.secrets.env`, `.npmrc` ni en un argumento de comando. El wrapper copia solo esta credencial al proceso privado de Wrangler y no la incorpora al artefacto ni a la atestación.
 
 Crea la configuración de staging y completa Account ID, dominio, SHA completo y estos nombres exactos; deja pendiente solo el UUID D1:
 
@@ -244,5 +265,7 @@ La restauración reemplaza el estado y pierde toda escritura posterior al bookma
 4. Ensaya en staging con recursos separados.
 5. Registra cuenta, versión Worker, bookmark D1, export, inventario R2 y lista de secretos.
 6. Promueve exactamente el SHA aprobado, ejecuta smoke contra el archivo correcto y conserva la evidencia.
+
+Al terminar la ventana de operación, elimina el token de la shell actual con `Remove-Item Env:CLOUDFLARE_API_TOKEN` en PowerShell o `unset CLOUDFLARE_API_TOKEN` en una shell POSIX.
 
 Una instalación pública debe informar dónde obtener el código fuente correspondiente de su versión modificada, como exige AGPL. El operador también asume seguridad, disponibilidad, identidad, correo, privacidad, retención, costos y cumplimiento legal.
