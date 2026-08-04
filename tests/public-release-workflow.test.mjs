@@ -171,11 +171,14 @@ test("tag ruleset must actively prohibit update and deletion of both release tag
     bypass_actors: [],
     conditions: { ref_name: { include: ["refs/tags/v*"], exclude: [] } },
     rules: [
-      { type: "update", parameters: { update_allows_fetch_and_merge: false } },
+      { type: "update" },
       { type: "deletion" },
     ],
   }];
   assert.equal(validateTagProtectionRulesets(protectedRuleset), true);
+  const tagRulesetWithExplicitBranchParameter = structuredClone(protectedRuleset[0]);
+  tagRulesetWithExplicitBranchParameter.rules[0].parameters = { update_allows_fetch_and_merge: false };
+  assert.equal(validateTagProtectionRulesets([tagRulesetWithExplicitBranchParameter]), true);
   const rulesetWithoutVisibleBypassActors = structuredClone(protectedRuleset[0]);
   Reflect.deleteProperty(rulesetWithoutVisibleBypassActors, "bypass_actors");
   assert.throws(
@@ -217,6 +220,22 @@ test("tag ruleset must actively prohibit update and deletion of both release tag
     }]),
     /exactly protect refs\/tags\/v\*/u,
   );
+  for (const unsafeParameters of [
+    null,
+    {},
+    { update_allows_fetch_and_merge: false, unknown_future_option: false },
+  ]) {
+    assert.throws(
+      () => validateTagProtectionRulesets([{
+        ...protectedRuleset[0],
+        rules: [
+          { type: "update", parameters: unsafeParameters },
+          { type: "deletion" },
+        ],
+      }]),
+      /exactly protect refs\/tags\/v\*/u,
+    );
+  }
 });
 
 test("source archives are byte-identical for the same exact Git commit", async (t) => {
@@ -775,7 +794,7 @@ class FakeReleaseAdminGitHub {
         bypass_actors: [],
         conditions: { ref_name: { include: ["refs/tags/v*"], exclude: [] } },
         rules: [
-          { type: "update", parameters: { update_allows_fetch_and_merge: false } },
+          { type: "update" },
           { type: "deletion" },
         ],
       };
