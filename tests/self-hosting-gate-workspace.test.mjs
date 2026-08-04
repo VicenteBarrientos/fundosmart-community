@@ -669,9 +669,11 @@ async function createFixture(label) {
   );
   await writeFile(path.join(repositoryPath, "source.txt"), "HEAD bytes\n");
   await mkdir(path.join(repositoryPath, "nested"));
-  await writeFile(path.join(repositoryPath, "nested", "tracked.txt"), "tracked bytes\n");
+  const executablePath = path.join(repositoryPath, "nested", "tracked.txt");
+  await writeFile(executablePath, "tracked bytes\n");
   await runGit(repositoryPath, ["add", "--", ".gitattributes", ".gitignore", "source.txt", "nested/tracked.txt"]);
   await runGit(repositoryPath, ["update-index", "--chmod=+x", "--", "nested/tracked.txt"]);
+  if (process.platform !== "win32") await chmod(executablePath, 0o755);
   await runGit(repositoryPath, [
     "-c",
     "user.name=FundoSmart Gate Test",
