@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  copyFile,
   mkdir,
   mkdtemp,
   readFile,
@@ -228,6 +229,78 @@ test("source archives are byte-identical for the same exact Git commit", async (
   assert.deepEqual(firstDescriptor, secondDescriptor);
   assert.deepEqual(await readFile(first), await readFile(second));
   assert.match(gunzipSync(await readFile(first)).toString("utf8"), /exact release bytes/u);
+});
+
+test("prepare CLI writes the exact protected workflow outputs", async (t) => {
+  const fixture = await mkdtemp(path.join(os.tmpdir(), "fundosmart-release-cli-"));
+  t.after(() => rm(fixture, { recursive: true, force: true }));
+  runGit(path.dirname(fixture), ["clone", "--quiet", "--no-hardlinks", root, fixture]);
+
+  const [packageMetadata, lock, sbom] = await Promise.all([
+    readJson(path.join(fixture, "package.json")),
+    readJson(path.join(fixture, "package-lock.json")),
+    readJson(path.join(fixture, "sbom.cdx.json")),
+  ]);
+  packageMetadata.version = PUBLIC_RELEASE_CONTRACT.version;
+  packageMetadata.packageManager = PUBLIC_RELEASE_CONTRACT.packageManager;
+  lock.version = PUBLIC_RELEASE_CONTRACT.version;
+  lock.packages[""].version = PUBLIC_RELEASE_CONTRACT.version;
+  sbom.metadata.component.version = PUBLIC_RELEASE_CONTRACT.version;
+  sbom.metadata.component.purl = `pkg:npm/${PUBLIC_RELEASE_CONTRACT.packageName}@${PUBLIC_RELEASE_CONTRACT.version}`;
+  await Promise.all([
+    writeFile(path.join(fixture, "package.json"), `${JSON.stringify(packageMetadata, null, 2)}\n`),
+    writeFile(path.join(fixture, "package-lock.json"), `${JSON.stringify(lock, null, 2)}\n`),
+    writeFile(path.join(fixture, "sbom.cdx.json"), `${JSON.stringify(sbom, null, 2)}\n`),
+    copyFile(
+      path.join(root, "scripts", "release", "verify-public-release.mjs"),
+      path.join(fixture, "scripts", "release", "verify-public-release.mjs"),
+    ),
+  ]);
+  runGit(fixture, ["add", "package.json", "package-lock.json", "sbom.cdx.json", "scripts/release/verify-public-release.mjs"]);
+  runGit(fixture, [
+    "-c",
+    "user.name=Release Test",
+    "-c",
+    "user.email=release@example.invalid",
+    "commit",
+    "--quiet",
+    "-m",
+    "Prepare CLI fixture",
+  ]);
+  const sha = runGit(fixture, ["rev-parse", "HEAD"]).trim();
+  runGit(fixture, ["remote", "set-url", "origin", "https://github.com/VicenteBarrientos/fundosmart-community.git"]);
+  runGit(fixture, ["update-ref", "refs/remotes/origin/main", sha]);
+
+  const outputFile = path.join(fixture, ".git", "public-release-output");
+  const stdout = execFileSync(
+    process.execPath,
+    [path.join(fixture, "scripts", "release", "verify-public-release.mjs"), "prepare"],
+    {
+      cwd: fixture,
+      encoding: "utf8",
+      windowsHide: true,
+      env: {
+        ...process.env,
+        GITHUB_OUTPUT: outputFile,
+        GITHUB_REPOSITORY: PUBLIC_RELEASE_CONTRACT.repository,
+        GITHUB_REF: PUBLIC_RELEASE_CONTRACT.ref,
+        GITHUB_SHA: sha,
+        RELEASE_SHA: sha,
+        RELEASE_VERSION: PUBLIC_RELEASE_CONTRACT.version,
+        RELEASE_CONFIRMATION: PUBLIC_RELEASE_CONTRACT.confirmation,
+      },
+    },
+  );
+  const outputText = await readFile(outputFile, "utf8");
+  const outputs = Object.fromEntries(outputText.trim().split("\n").map((line) => line.split("=")));
+  assert.match(stdout, /Deterministic public release bundle prepared/u);
+  assert.equal(outputs.artifact_name, "public-release-v0.2.0");
+  assert.equal(outputs.archive_name, "fundosmart-community-v0.2.0.tar.gz");
+  assert.equal(outputs.sbom_name, "fundosmart-community-v0.2.0.cdx.json");
+  assert.equal(outputs.checksums_name, "SHA256SUMS");
+  assert.match(outputs.archive_sha256, /^[0-9a-f]{64}$/u);
+  assert.match(outputs.sbom_sha256, /^[0-9a-f]{64}$/u);
+  assert.match(outputs.checksums_sha256, /^[0-9a-f]{64}$/u);
 });
 
 test("bundle verifier rejects any post-gate mutation", async (t) => {
@@ -484,6 +557,10 @@ function validSbom() {
 
 function descriptor(bytes) {
   return { sha256: createHash("sha256").update(bytes).digest("hex"), size: bytes.length };
+}
+
+async function readJson(filePath) {
+  return JSON.parse(await readFile(filePath, "utf8"));
 }
 
 function runGit(cwd, args) {

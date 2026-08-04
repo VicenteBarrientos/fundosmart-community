@@ -377,7 +377,7 @@ export function identityFromEnvironment(environment = process.env) {
   });
 }
 
-async function writeGitHubOutputs(outputPath, manifest) {
+async function writeGitHubOutputs(outputPath, identity, manifest) {
   if (!outputPath) return;
   const outputs = {
     archive_name: RELEASE_FILE_NAMES.archive,
@@ -510,7 +510,7 @@ async function runCli() {
   }
   if (command === "prepare") {
     const prepared = await prepareReleaseBundle({ cwd, identity, outputPath });
-    await writeGitHubOutputs(process.env.GITHUB_OUTPUT, prepared.manifest);
+    await writeGitHubOutputs(process.env.GITHUB_OUTPUT, identity, prepared.manifest);
     process.stdout.write(`Deterministic public release bundle prepared at ${PUBLIC_RELEASE_CONTRACT.outputRelativePath}.\n`);
     return;
   }
