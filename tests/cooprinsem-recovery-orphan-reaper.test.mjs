@@ -32,7 +32,7 @@ const SIGNING_KEY = new Uint8Array(32).fill(0x6b);
 const WRONG_SIGNING_KEY = new Uint8Array(32).fill(0x31);
 const MANIFEST_SHA256 = "d".repeat(64);
 
-test("una muerte abrupta conserva hasta expirar y luego destruye solo el workspace autenticado", async () => {
+test("una muerte abrupta conserva hasta expirar y luego destruye solo el workspace autenticado", async (t) => {
   await withReaperRoot(async (workspaceRootPath) => {
     const workspaceKeyring = await keyringFor(workspaceRootPath, "key_current", SIGNING_KEY);
     const wrongKeyring = await keyringFor(workspaceRootPath, "key_wrong", WRONG_SIGNING_KEY);
@@ -45,6 +45,10 @@ test("una muerte abrupta conserva hasta expirar y luego destruye solo el workspa
     const child = spawnCrashOwner({ workspaceRootPath, readyPath, signingKey: SIGNING_KEY });
     const ready = await waitForReady(readyPath, child);
     assert.equal(path.dirname(ready.workspacePath), workspaceRootPath);
+    t.mock.timers.enable({
+      apis: ["Date"],
+      now: Date.parse(ready.expiresAt) - 1,
+    });
     const exited = once(child, "exit");
     assert.equal(child.kill("SIGKILL"), true);
     await exited;
@@ -62,7 +66,7 @@ test("una muerte abrupta conserva hasta expirar y luego destruye solo el workspa
     assert.equal(beforeExpiry.destroyedWorkspaceCount, 0);
     assert.equal(await pathExists(ready.workspacePath), true);
 
-    await waitUntilAfter(ready.expiresAt);
+    t.mock.timers.setTime(Date.parse(ready.expiresAt) + 75);
     const wrongKey = await sweepIsolatedRecoveryOrphanWorkspaces({
       workspaceRootPath,
       workspaceKeyring: wrongKeyring,
@@ -245,7 +249,7 @@ function spawnCrashOwner({ workspaceRootPath, readyPath, signingKey }) {
     import { createIsolatedRecoveryWorkspaceKeyring } from ${JSON.stringify(keyringModuleUrl)};
     const [workspaceRootPath, readyPath, signingKeyHex] = process.argv.slice(1);
     const createdAt = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + 2500).toISOString();
+    const expiresAt = new Date(Date.now() + 30 * 60_000).toISOString();
     const workspaceKeyring = await createIsolatedRecoveryWorkspaceKeyring({
       workspaceRootPath,
       activeKeyId: "key_current",
@@ -292,12 +296,6 @@ async function waitForReady(readyPath, child) {
     await delay(20);
   }
   throw new Error("El proceso de prueba no creo el marcador a tiempo.");
-}
-
-async function waitUntilAfter(iso) {
-  const waitMs = Math.max(0, Date.parse(iso) - Date.now() + 75);
-  if (waitMs > 5_000) throw new Error("La expiracion de prueba excede el limite esperado.");
-  await delay(waitMs);
 }
 
 function delay(milliseconds) {

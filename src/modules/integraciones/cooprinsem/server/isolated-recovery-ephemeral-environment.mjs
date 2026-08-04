@@ -108,7 +108,7 @@ export async function runInIsolatedRecoveryEphemeralEnvironment(input, execute) 
     if (await sha256File(clonePath) !== sourceDatabaseSha256) {
       throw new Error("La copia SQLite efímera no conserva la huella de origen.");
     }
-    database = new DatabaseSync(clonePath);
+    database = new DatabaseSync(path.toNamespacedPath(clonePath));
     database.exec("PRAGMA foreign_keys = ON");
     assertRecoveryClone(database, recoveryJobId);
     objectStore = Object.freeze(createIsolatedMemoryObjectStore());
