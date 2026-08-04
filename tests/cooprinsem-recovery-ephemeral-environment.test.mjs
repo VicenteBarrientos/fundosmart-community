@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { access, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -120,6 +120,45 @@ test("ejecuta el procesador en un clon dedicado y destruye objetos y archivos si
       manifest: execution.manifest,
       receipt: execution.receipt,
     }), /recovery-1|operator-local|local-worker|fundosmart-recovery-source|\\|:\//i);
+  });
+});
+
+test("abre y destruye el clon SQLite aunque su ruta local exceda el límite clásico de Windows", async () => {
+  await withLongWorkspaceRoot(async (workspaceRootPath) => {
+    const workspaceKeyring = await createIsolatedRecoveryWorkspaceKeyring({
+      workspaceRootPath,
+      activeKeyId: "key_current",
+      activeKey: new Uint8Array(32).fill(0x5a),
+    });
+    await withSourceFixture(async (fixture) => {
+      let clonePath;
+      const execution = await runInIsolatedRecoveryEphemeralEnvironment({
+        sourceDatabasePath: fixture.databasePath,
+        expectedSourceDatabaseSha256: fixture.sha256,
+        recoveryJobId: "recovery-1",
+        operator: operatorAttestation(),
+        guard,
+        workspaceRootPath,
+        workspaceKeyring,
+      }, (runtime) => {
+        clonePath = path.join(runtime.localWorkspacePath, "recovery.sqlite");
+        assert.ok(clonePath.length >= 260, `ruta de regresión demasiado corta: ${clonePath.length}`);
+        runtime.database.exec("BEGIN IMMEDIATE");
+        try {
+          runtime.database.prepare(`
+            UPDATE restore_recovery_jobs SET updated_at = ? WHERE id = 'recovery-1'
+          `).run(runtime.manifest.createdAt);
+        } finally {
+          runtime.database.exec("ROLLBACK");
+        }
+        return "opened";
+      });
+
+      assert.equal(execution.result, "opened");
+      assert.equal(execution.receipt.outcome, "succeeded");
+      assert.equal(execution.receipt.destructionVerified, true);
+      assert.equal(await pathExists(path.dirname(clonePath)), false);
+    });
   });
 });
 
@@ -308,7 +347,22 @@ test("el runner permanece fuera de API, Worker y adaptadores remotos", async () 
   assert.doesNotMatch(worker, /runInIsolatedRecoveryEphemeralEnvironment|fundosmart\.isolated-recovery-environment-manifest\.v1/);
   assert.match(moduleSource, /createAuthenticatedIsolatedRecoveryWorkspace\(/);
   assert.match(moduleSource, /destroyAuthenticatedIsolatedRecoveryWorkspace\(/);
+  assert.match(moduleSource, /new DatabaseSync\(path\.toNamespacedPath\(clonePath\)\)/);
 });
+
+async function withLongWorkspaceRoot(run) {
+  const containerPath = await mkdtemp(path.join(tmpdir(), "fundosmart-long-workspace-"));
+  const workspaceRootPath = path.join(containerPath, `nested-${"x".repeat(96)}`);
+  try {
+    await mkdir(workspaceRootPath);
+    await run(workspaceRootPath);
+  } finally {
+    const resolved = path.resolve(containerPath);
+    assert.equal(path.dirname(resolved), path.resolve(tmpdir()));
+    assert.match(path.basename(resolved), /^fundosmart-long-workspace-/);
+    await rm(resolved, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  }
+}
 
 async function withSourceFixture(run) {
   const sourceRoot = await mkdtemp(path.join(tmpdir(), "fundosmart-recovery-source-"));
