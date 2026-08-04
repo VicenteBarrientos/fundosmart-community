@@ -1,0 +1,212 @@
+name: Release FundoSmart Community
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact source release version
+        required: true
+        type: string
+        default: "0.2.0"
+      release_sha:
+        description: Full commit SHA currently at main
+        required: true
+        type: string
+      confirmation:
+        description: Type "publish v0.2.0" to confirm immutable publication
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: public-release-v0.2.0
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: Verify source and build release bundle
+    if: github.repository == 'VicenteBarrientos/fundosmart-community' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    outputs:
+      archive_name: ${{ steps.prepare.outputs.archive_name }}
+      sbom_name: ${{ steps.prepare.outputs.sbom_name }}
+      checksums_name: ${{ steps.prepare.outputs.checksums_name }}
+      artifact_name: ${{ steps.prepare.outputs.artifact_name }}
+      archive_sha256: ${{ steps.prepare.outputs.archive_sha256 }}
+      sbom_sha256: ${{ steps.prepare.outputs.sbom_sha256 }}
+      checksums_sha256: ${{ steps.prepare.outputs.checksums_sha256 }}
+    env:
+      CLOUDFLARE_API_TOKEN: ""
+      CLOUDFLARE_API_KEY: ""
+      CLOUDFLARE_EMAIL: ""
+      WRANGLER_SEND_METRICS: "false"
+      RELEASE_VERSION: "0.2.0"
+      RELEASE_SHA: ${{ github.sha }}
+      RELEASE_CONFIRMATION: "publish v0.2.0"
+    steps:
+      - name: Reject an invalid dispatch identity before checkout
+        shell: bash
+        env:
+          EVENT_REPOSITORY: ${{ github.repository }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_SHA: ${{ github.sha }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_RELEASE_SHA: ${{ inputs.release_sha }}
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$EVENT_REPOSITORY" = "VicenteBarrientos/fundosmart-community"
+          test "$EVENT_REF" = "refs/heads/main"
+          [[ "$EVENT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$INPUT_RELEASE_SHA" = "$EVENT_SHA"
+          test "$INPUT_VERSION" = "0.2.0"
+          test "$INPUT_CONFIRMATION" = "publish v0.2.0"
+
+      - name: Check out the exact confirmed commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Fetch the current public main without credentials
+        shell: bash
+        run: git fetch --no-tags --force origin main:refs/remotes/origin/main
+
+      - name: Verify immutable source identity before installation
+        run: node scripts/release/verify-public-release.mjs preflight
+
+      - name: Reconcile main immediately before packaging
+        shell: bash
+        run: git fetch --no-tags --force origin main:refs/remotes/origin/main
+
+      - name: Create and verify deterministic release assets
+        id: prepare
+        run: node scripts/release/verify-public-release.mjs prepare
+
+      - name: Upload the exact release bundle before dependency execution
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.prepare.outputs.artifact_name }}
+          path: work/public-release/*
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
+          retention-days: 1
+
+      - name: Pin the declared npm release
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global npm@10.9.3 --ignore-scripts
+          test "$(npm --version)" = "10.9.3"
+          test "$(node -p 'require("./package.json").packageManager')" = "npm@10.9.3"
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run the complete source gate
+        run: npm run check
+
+  attest:
+    name: Sign provenance and SBOM attestations
+    needs: gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - name: Download this run's verified release bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.gate.outputs.artifact_name }}
+          path: work/public-release
+
+      - name: Verify exact checksums without executing repository code
+        shell: bash
+        env:
+          ARCHIVE_NAME: ${{ needs.gate.outputs.archive_name }}
+          ARCHIVE_SHA256: ${{ needs.gate.outputs.archive_sha256 }}
+          SBOM_NAME: ${{ needs.gate.outputs.sbom_name }}
+          SBOM_SHA256: ${{ needs.gate.outputs.sbom_sha256 }}
+          CHECKSUMS_SHA256: ${{ needs.gate.outputs.checksums_sha256 }}
+        run: |
+          set -euo pipefail
+          cd work/public-release
+          test "$(sha256sum SHA256SUMS | cut -d ' ' -f 1)" = "$CHECKSUMS_SHA256"
+          expected_file="$(mktemp)"
+          trap 'rm -f "$expected_file"' EXIT
+          printf '%s  %s\n%s  %s\n' "$ARCHIVE_SHA256" "$ARCHIVE_NAME" "$SBOM_SHA256" "$SBOM_NAME" > "$expected_file"
+          cmp --silent "$expected_file" SHA256SUMS
+          sha256sum --check --strict SHA256SUMS
+
+      - name: Attest build provenance for every release asset
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-path: |
+            work/public-release/${{ needs.gate.outputs.archive_name }}
+            work/public-release/${{ needs.gate.outputs.sbom_name }}
+            work/public-release/${{ needs.gate.outputs.checksums_name }}
+
+      - name: Bind the CycloneDX SBOM to the source archive
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-path: work/public-release/${{ needs.gate.outputs.archive_name }}
+          sbom-path: work/public-release/${{ needs.gate.outputs.sbom_name }}
+
+  publish:
+    name: Publish new immutable GitHub release
+    needs: [gate, attest]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: public-release
+    permissions:
+      actions: read
+      contents: write
+    env:
+      RELEASE_VERSION: "0.2.0"
+      RELEASE_SHA: ${{ github.sha }}
+      RELEASE_CONFIRMATION: "publish v0.2.0"
+    steps:
+      - name: Check out only the attested publisher source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Set up Node.js 22 without installing dependencies
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      - name: Download this run's attested release bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.gate.outputs.artifact_name }}
+          path: work/public-release
+
+      - name: Verify the bundle before exposing a write token
+        run: node scripts/release/verify-public-release.mjs verify-bundle
+
+      - name: Create, fill and publish only a new immutable release
+        env:
+          PUBLIC_RELEASE_TOKEN: ${{ github.token }}
+          PUBLIC_RELEASE_ADMIN_READ_TOKEN: ${{ secrets.PUBLIC_RELEASE_ADMIN_READ_TOKEN }}
+        run: node scripts/release/publish-public-release.mjs
