@@ -68,7 +68,7 @@
     "leaflet": "^1.9.4",
     "lucide-react": "^1.25.0",
     "maplibre-gl": "4.7.1",
-    "next": "16.2.11",
+    "next": "16.4.3",
     "proj4": "^2.20.9",
     "react": "19.2.8",
     "react-dom": "19.2.8",
